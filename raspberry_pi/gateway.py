@@ -20,7 +20,7 @@ def main() -> None:
     parser.add_argument("--no-sensors", action="store_true")
     parser.add_argument("--no-actuators", action="store_true")
     parser.add_argument("--preview", action="store_true", help="Local display only; no recording or web stream")
-    parser.add_argument("--calibrate", action="store_true", help="Sit neutrally for the first 90 reliable frames")
+    parser.add_argument("--calibrate", action="store_true", help="Sit neutrally for at least 30 reliable frames and 1.2 seconds")
     parser.add_argument("--metrics-csv", help="Write local numeric timing/geometry metadata; no raw imagery")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

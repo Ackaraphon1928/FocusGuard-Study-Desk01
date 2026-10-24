@@ -1,8 +1,8 @@
-# FocusGuard
+﻿# FocusGuard
 
 A local-first smart study desk prototype based on [the project design](FocusGuard_Privacy_Aware_Smart_Study_Desk.md). It combines posture, viewing distance, occupancy, lighting, relative noise, temperature, and humidity into explainable feedback and automated desk controls.
 
-The application runs immediately with a sensor simulator. The same decision engine accepts real MQTT telemetry from the included ESP32 firmware and Raspberry Pi gateway. Simulated values are visibly labeled and kept separate from hardware readings. No camera frames or recorded audio are sent to the backend.
+The application runs immediately with a sensor simulator. The same decision engine accepts real MQTT telemetry from the included ESP32 firmware and Raspberry Pi gateway. Simulated values are visibly labeled and kept separate from hardware readings. Camera capture, MediaPipe inference, calibration and posture logic run in Python on the backend PC or Raspberry Pi. React displays derived results and controls the pipeline. Camera frames are not recorded; an optional local debug preview is off by default.
 
 ## Run it
 
@@ -35,8 +35,13 @@ For frontend development, keep the API running at port 8000 and run `npm --prefi
 5. Inspect trends, the posture timeline, and warning heatmap in **Analytics**. Download timestamped CSV data with **Export data**.
 6. Tune thresholds, weights, reminders, and lamp/fan overrides in **Rules & settings**. Cloud summaries are opt-in. Fast demo timing persists until you change it.
 
-The desk illustration displays a categorical posture state. For a real webcam demo on this PC, use **Overview → PC camera · pose lab → Start PC camera**, choose Front/Side and **Calibrate upright posture**. Front webcam tracking needs a reliable head and both shoulders; hips may stay behind the desk. MediaPipe runs locally in a browser worker with a skeleton overlay, posture labels and tracking diagnostics. The remaining demo sensors stay simulated. **Stop camera** releases the camera; **Use simulated vision** explicitly restores generated posture input. See the [PC camera guide](docs/PC_CAMERA.md) for setup, privacy, calibration and limitations. Pi camera preview remains available through the hardware adapter.
+The desk illustration displays a categorical posture state. For real camera processing, provision the optional Python vision dependencies and verified model:
 
+```powershell
+.\start.ps1 -Install -Vision
+```
+
+Then open **Overview → Python camera · pose lab → Start backend camera**, select the backend camera index and Front/Side, sit upright, and choose **Calibrate upright posture**. Front view supports a reliable head and both shoulders above a desk; hips are optional. Python captures the camera attached to the backend machine, runs MediaPipe and the shared classifier, and logs posture/reason/FPS in the terminal. The panel displays metadata; **Enable local debug preview** optionally streams a skeleton image without recording. The camera is not opened by the browser. In demo mode, the remaining sensors stay simulated. **Stop camera** releases capture; **Use simulated vision** explicitly restores generated posture. See the [Python camera guide](docs/PC_CAMERA.md) for manual setup, debugging and Pi deployment.
 ## Technology choices
 
 | Layer | Implementation | Purpose |
@@ -45,7 +50,7 @@ The desk illustration displays a categorical posture state. For a real webcam de
 | Frontend tooling | Node.js 24 LTS, npm lockfile, Vite 8, ESLint | Reproducible builds, hot reload, static analysis |
 | Frontend data and forms | TanStack Query 5, React Router 7, React Hook Form + Zod | Server-state caching, live updates, navigation and validated settings |
 | Charts and UI | Recharts 3, Lucide React | Time-series charts and consistent icons |
-| PC camera demo | MediaPipe Tasks Vision 0.10.32, browser Web Worker | Local webcam landmarks, calibrated posture labels, same-origin versioned WASM/model assets |
+| Camera processing | Python MediaPipe Tasks, OpenCV / Picamera2, shared calibrated classifier | Capture, inference, posture labels and terminal diagnostics on backend PC or Pi |
 | Local service | Python, FastAPI, Pydantic, Uvicorn | Validated HTTP API, WebSocket feed, deterministic decision engine |
 | Local journal | SQLite with timestamped records | Zero-service demo, settings/sessions/history persistence |
 | IoT transport | Mosquitto MQTT 3.1.1, Paho, PubSubClient | Distributed sensor metadata, events, configuration, expiring actuator commands |
@@ -59,7 +64,7 @@ Node.js provides the standard frontend development and build runtime. FastAPI ke
 
 ## Hardware and full local stack
 
-See **[Hardware and deployment guide](docs/HARDWARE.md)** for the pin map, wiring, drivers, network credentials, and camera calibration. The Pi vision environment specifically targets **64-bit Raspberry Pi OS, Python 3.11, and MediaPipe 0.10.18**, which has an ARM64 wheel. This is a separate environment from the backend.
+See **[Hardware and deployment guide](docs/HARDWARE.md)** for the pin map, wiring, drivers, network credentials, and camera calibration. The Pi vision environment specifically targets **64-bit Raspberry Pi OS, Python 3.11, and MediaPipe 0.10.18**, which has an ARM64 wheel. Desktop vision uses the optional `backend/requirements-vision.txt`; Pi deployment uses platform-specific dependency pins. Both share `backend.vision.posture` and can run the direct-backend camera service.
 
 To start Mosquitto, InfluxDB, Grafana, and the app with Docker:
 
@@ -83,7 +88,7 @@ Switch **Devices & network → Data source → Real hardware**, or start with ` 
 
 ## Privacy and failure behavior
 
-- Video inference and preview stay on the capturing PC browser or Pi; only derived posture metadata reaches the local service. The sound sensor sends amplitude, not speech. The pinned browser runtime, model provenance and MediaPipe metrics-policy scope are documented in [PC_CAMERA.md](docs/PC_CAMERA.md).
+- Python processes camera frames and body landmarks locally. Dashboard status contains derived labels/diagnostics; the optional local MJPEG debug preview sends images only while explicitly enabled. No camera recording or landmark arrays enter SQLite, Influx, CSV or cloud summaries. The sound sensor sends amplitude, not speech. See [PC_CAMERA.md](docs/PC_CAMERA.md) for model provenance and SDK privacy scope.
 - Low-confidence or stale vision is excluded from posture warnings. Independent environment sensors continue when the camera fails.
 - Rules use sustained conditions and cooldowns. No actuator depends on a cloud AI response.
 - Cloud AI is disabled by default. Configure `BEDROCK_MODEL_ID` and AWS credentials on the server, then enable consent in settings. Session summaries send an allowlisted aggregate object. Failed or unconfigured AI falls back to an explicitly labeled local summary.
@@ -102,7 +107,7 @@ npm --prefix frontend test
 npm --prefix frontend run build
 ```
 
-Tests exercise rule timing, cooldowns, occupancy, staleness, sensor fusion, break/session accounting, persistence, controls, input validation, privacy boundaries, AI failure, and pure gateway logic. They use isolated stores and controlled time.
+Tests exercise rule timing, cooldowns, occupancy, staleness, sensor fusion, break/session accounting, persistence, backend camera lifecycle, Python posture classification, controls, input validation, privacy boundaries, AI failure, and gateway logic. They use isolated stores and controlled time.
 
 See the **[verification record](docs/VERIFICATION.md)** for the software checks and their limits. React behavior tests use Vitest, React Testing Library, and jsdom; Python tests cover backend and hardware-adapter behavior. Browser layout, real services, and physical hardware require separate validation.
 
@@ -114,9 +119,9 @@ The software demo and integrations are implemented. Physical sensor accuracy, Ra
 
 ```text
 frontend/           React / TypeScript / Tailwind dashboard, Node build, component tests
-backend/            API, decision engine, persistence, MQTT/Influx/Bedrock adapters
+backend/            API, shared Python vision, rules, journal, MQTT/Influx/Bedrock
 esp32/              Node A and B firmware + shared configuration
-raspberry_pi/       Local camera model, calibration, I2C sensors, GPIO outputs
+raspberry_pi/       Shared-vision gateway adapter, I2C sensors, GPIO outputs
 infrastructure/     Compose stack, credentials setup, MQTT, Grafana provisioning
 evaluation/         Metrics CLI, synthetic example, latency capture, protocol
 tests/              Deterministic behavior and integration checks

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { Bell, Database, Download, Info, Leaf, MoveHorizontal } from 'lucide-react';
 import type { HistoryPoint, Posture, VisionSource } from '../lib/types';
 import { exportUrl } from '../lib/api';
@@ -98,7 +98,7 @@ export function AnalyticsPage() {
         <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold text-stone-800">Measure what matters</h3><p className="mt-1 text-sm text-stone-500">Live diagnostics and the evaluation tools included with your prototype</p></div><Badge tone="muted">{mode === 'demo' ? 'Demo · not a benchmark' : 'Live diagnostics'}</Badge></div>
         {metrics.error && <div className="mt-4"><ErrorNotice error={metrics.error} /></div>}
         <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
-          <Diagnostic label="Vision throughput" value={`${formatNumber(fps, 1)} FPS`} description={pcCamera ? 'Measured PC camera processing rate in your browser; not Raspberry Pi throughput.' : mode === 'demo' ? 'Simulated value; run PC camera or Pi vision to measure throughput.' : 'Reported by your local vision gateway.'} />
+          <Diagnostic label="Vision throughput" value={`${formatNumber(fps, 1)} FPS`} description={pcCamera ? 'Measured camera processing rate on the Python backend machine.' : mode === 'demo' ? 'Simulated value; run PC camera or Pi vision to measure throughput.' : 'Reported by your local vision gateway.'} />
           <Diagnostic label="Publisher → gateway latency" value={mode === 'demo' || observedMetrics?.ingestion_latency_ms.mean == null ? 'Awaiting samples' : `${formatNumber(observedMetrics.ingestion_latency_ms.mean, 1)} ms`} description={mode === 'demo' ? 'Physical latency is not measured by the simulator.' : `Mean / p95: ${formatNumber(observedMetrics?.ingestion_latency_ms.mean, 1)} / ${formatNumber(observedMetrics?.ingestion_latency_ms.p95, 1)} ms · ${observedMetrics?.ingestion_latency_ms.samples ?? 0} samples. Synchronized clocks required.`} />
           <Diagnostic label="Posture accuracy / F1" value="Awaiting trials" description="Collect labeled samples and run evaluation/evaluate.py." />
           <Diagnostic label="Distance MAE / actuator latency" value="Awaiting trials" description="Compare reference distances and physical actuator timestamps." />

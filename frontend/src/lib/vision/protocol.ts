@@ -1,17 +1,11 @@
-import type { Posture } from '../types';
-import type { CameraView, Landmark, PostureResult } from './posture';
+﻿import type { Posture } from '../types';
+import type { CameraView, PostureResult } from './posture';
 
-export type PoseWorkerInput =
-  | { type: 'init'; view: CameraView }
-  | { type: 'frame'; frame: ImageBitmap; timestampMs: number }
-  | { type: 'calibrate' }
-  | { type: 'view'; view: CameraView }
-  | { type: 'close' };
-
+/** Derived diagnostics only. Body landmarks never travel in the JSON response. */
 export interface PoseObservation {
   type: 'result';
   result: PostureResult;
-  landmarks: Landmark[][];
+  landmarks: [];
   people: number;
   fps: number;
   inferenceMs: number;
@@ -19,42 +13,26 @@ export interface PoseObservation {
   height: number;
 }
 
-export type PoseWorkerOutput =
-  | { type: 'ready'; delegate: 'GPU' | 'CPU' }
-  | PoseObservation
-  | { type: 'error'; message: string };
-
-export interface PcVisionMetadata {
-  person_detected: boolean;
-  posture: Posture;
-  confidence: number;
+export interface VisionSnapshot {
+  status: 'idle' | 'loading' | 'running' | 'stopped' | 'error';
+  error: string | null;
+  message: string;
+  delegate: 'CPU' | 'GPU' | null;
+  cameraIndex: number;
+  view: CameraView;
+  observation: PoseObservation | null;
   fps: number;
-  vision_available: boolean;
-  inference_ms: number;
-  ambiguous_people: boolean;
+  inferenceMs: number;
+  frames: number;
+  updatedAt: string | null;
+  previewEnabled: boolean;
 }
 
-const bounded = (value: number, upper: number) => Number.isFinite(value) ? Math.max(0, Math.min(upper, value)) : 0;
-
-/** Explicit allowlist. Neither frames nor landmarks can cross the HTTP boundary. */
-export function observationMetadata(observation: PoseObservation): PcVisionMetadata {
-  const { result } = observation;
-  const reliable = result.calibration.status === 'ready' && result.posture !== 'UNKNOWN' && result.posture !== 'NO_PERSON' && observation.people === 1;
-  return {
-    person_detected: result.personDetected,
-    posture: result.posture,
-    confidence: reliable ? bounded(result.confidence, 1) : 0,
-    fps: bounded(observation.fps, 240),
-    vision_available: true,
-    inference_ms: bounded(observation.inferenceMs, 60000),
-    ambiguous_people: observation.people > 1,
-  };
-}
-
-export const unavailableMetadata = (): PcVisionMetadata => ({
-  person_detected: false, posture: 'UNKNOWN', confidence: 0, fps: 0,
-  vision_available: false, inference_ms: 0, ambiguous_people: false,
-});
+export const initialVisionSnapshot: VisionSnapshot = {
+  status: 'idle', error: null, message: 'Python camera is off. Start it when you are ready.',
+  delegate: null, cameraIndex: 0, view: 'front', observation: null,
+  fps: 0, inferenceMs: 0, frames: 0, updatedAt: null, previewEnabled: false,
+};
 
 export const poseDescriptions: Record<Posture, string> = {
   GOOD: 'Upright / นั่งตรง',

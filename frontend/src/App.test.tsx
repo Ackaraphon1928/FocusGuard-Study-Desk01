@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+﻿import { describe, expect, it, vi } from 'vitest';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
@@ -68,7 +68,7 @@ describe('React workspace routes and privacy', () => {
     renderWorkspace(<App />, '/analytics');
     expect(await screen.findByText('PC camera + simulated environment')).toBeInTheDocument();
     expect(await screen.findByText('14.3 FPS')).toBeInTheDocument();
-    expect(screen.getByText('Measured PC camera processing rate in your browser; not Raspberry Pi throughput.')).toBeInTheDocument();
+    expect(screen.getByText('Measured camera processing rate on the Python backend machine.')).toBeInTheDocument();
     expect(screen.queryByText(/Simulated value; run/)).not.toBeInTheDocument();
     expect(screen.getByText('Mixed vision sources')).toBeInTheDocument();
     expect(screen.getAllByTitle(/· PC camera/).length).toBeGreaterThan(0);
@@ -76,7 +76,7 @@ describe('React workspace routes and privacy', () => {
     expect(screen.getByText('Simulated distance · not measured by webcam')).toBeInTheDocument();
     expect(screen.getAllByText('Awaiting trials')).toHaveLength(2);
     await userEvent.click(screen.getByRole('button', { name: 'How it works' }));
-    expect(screen.getByText(/PC camera video is processed in your browser/)).toBeInTheDocument();
+    expect(screen.getByText(/Camera capture and posture processing run in Python/)).toBeInTheDocument();
   });
 
   it('uses current PC camera FPS when metrics still describe the previous simulated source', async () => {

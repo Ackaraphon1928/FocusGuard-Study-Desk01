@@ -101,9 +101,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     root = Path(__file__).resolve().parent.parent
     parser.add_argument("--dataset", type=Path, default=root / "IMG_dataset")
-    parser.add_argument("--model", type=Path, default=root / "frontend/public/vision/pose_landmarker_lite.task")
-    parser.add_argument("--output", type=Path, default=root / "frontend/src/test/fixtures/pc-dataset.landmarks.json")
-    parser.add_argument("--confidence", type=float, default=0.5, help="Detection, presence and tracking threshold; default matches adjusted browser.")
+    parser.add_argument("--model", type=Path, help="Verified local model; defaults to backend/Pi model resolution.")
+    parser.add_argument("--output", type=Path, default=root / "evaluation/fixtures/pc-dataset.landmarks.json")
+    parser.add_argument("--confidence", type=float, default=0.5, help="Detection, presence and tracking threshold; default matches the Python camera service.")
     parser.add_argument("--video-frames", type=int, default=30, help="Use VIDEO mode with this many repeated frames per image, warmed by GOOD first. Zero selects independent IMAGE inference.")
     args = parser.parse_args()
     if not 0 < args.confidence <= 1:
@@ -112,6 +112,8 @@ def main() -> None:
         parser.error("--video-frames must be nonnegative")
     if importlib.metadata.version("mediapipe") != SDK_VERSION:
         raise RuntimeError(f"Expected mediapipe=={SDK_VERSION}; use pc_dataset.requirements.txt")
+    from backend.vision.model import ensure_model
+    args.model = ensure_model(args.model)
     model_hash = sha256(args.model)
     if model_hash != MODEL_SHA256:
         raise RuntimeError(f"Unexpected MediaPipe model SHA256: {model_hash}")

@@ -15,6 +15,7 @@ backend/data/
 *.sqlite3-wal
 infrastructure/secrets/
 raspberry_pi/models/
+backend/vision/models/
 raspberry_pi/calibration.json
 evaluation/results/
 evaluation/capture*.csv
@@ -23,11 +24,7 @@ evaluation/capture*.csv
 .tools/
 node_modules/
 frontend/dist/
-frontend/public/vision/wasm/
-frontend/public/vision/*.task
-frontend/public/vision/*.tmp
-frontend/public/vision/assets.json
-frontend/public/vision/pose.worker.js
+frontend/public/vision/
 *.tsbuildinfo
 coverage/
 IMG_dataset/

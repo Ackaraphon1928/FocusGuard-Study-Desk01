@@ -1,5 +1,6 @@
 # Exact backend dependency closure verified on Python 3.13, Windows x64.
-# Includes uvicorn standard extras; ESP32/vision tools use separate environments.
+# Includes uvicorn standard extras. Optional native backend vision is installed
+# alongside this base API closure with requirements-vision.txt.
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1

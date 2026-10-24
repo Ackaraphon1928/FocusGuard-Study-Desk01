@@ -2,7 +2,28 @@
 
 Checked on 24 October 2026 in the supplied Windows workspace. The current frontend is React / TypeScript / Tailwind, built with Node.js 24 LTS and Vite.
 
-## Seated PC webcam logic correction
+## Current Python backend vision migration
+
+Capture, native MediaPipe inference, calibration, geometry, posture labels and temporal stabilization now run in Python. React sends controls and renders backend results; the browser SDK, worker, WASM/model delivery and TypeScript classifier were removed. The direct backend camera service and standalone Pi adapter share `backend/vision/posture.py`.
+
+| Check | Result |
+|---|---|
+| Python behavior and integration | **198 tests passed**, covering the existing engine/integrations, 87 shared-classifier/Pi tests, 21 camera/model/persistence tests and 14 vision API tests |
+| Frontend controls and presentation | **71 tests passed** in 10 Vitest files; TypeScript and production build passed. Computational tests moved to Python rather than being left against an unused TS implementation |
+| Migration equivalence | Archived accepted TypeScript and canonical Python matched **6,300 frame outputs** across 60 deterministic sequences, including front/side, upper/full, depth, occlusion, multiple people, view reset and jitter; numeric tolerance `1e-12` |
+| Fixed-landmark tuning replay | Python CLI retains **7/7** supplied-label agreement using the one GOOD reference. The images are tuning samples, not held-out accuracy |
+| Native camera-service probe | Actual CPU MediaPipe with an injected still-image camera matched **6/7**. Extreme `SLOUCH1` remained `UNKNOWN` because newly inferred shoulders were cropped/unreliable. Frames and FPS included a deliberate replay delay; this is not a camera/Pi performance benchmark |
+| Resource and control behavior | Tests cover one capture owner, lazy startup, missing camera/model, loss/disconnect, calibration/view races, stale callbacks, mode/source handoff, optional preview, GPU initialization fallback, shutdown and atomic numeric calibration persistence |
+| Privacy boundary | HTTP observations contain an empty landmark array and derived results only. Optional in-memory MJPEG needs explicit preview enablement; GET does not enable it. No raw image-upload route, recordings, frame/landmark logs or cloud camera inference were added |
+| Native setup | Desktop MediaPipe **0.10.32**, OpenCV **5.0.0**, NumPy **2.5.4** installed in the application venv; `pip check` passed. The reused lite model matched its pinned SHA256 |
+| Served application | **10 HTTP/WebSocket checks passed** on ports 8000 and 5173: Python vision status/runtime metadata, strict request validation, disabled preview, cross-origin rejection and removal/hiding of browser workers, WASM/models and dataset images. No physical camera was opened for these HTTP checks |
+| Launcher and packaging | PowerShell parser and actual `start.ps1 -Vision` startup passed; app logs appeared in the terminal. Both base/authenticated Compose configurations validated. The updated container image was not built/run in this session |
+
+No physical webcam, Raspberry Pi 5, Picamera2, GPU delegate or real actuators were exercised during this migration. CPU is the default; GPU support must be established on the actual package/driver/OS combination. A pre-existing headless service survives dashboard navigation; a camera explicitly started by the page is stopped on leave/hide. Configure `CALIBRATION_FILE` to restore a verified baseline for headless restarts, and perform the initial upright calibration deliberately.
+
+Use `python -m evaluation.evaluate_pc_posture` for the current tuning report and [PC_CAMERA.md](PC_CAMERA.md) for setup and debug logs. The sections below record earlier implementations and do not describe the current runtime.
+
+## Earlier seated PC webcam logic correction
 
 The user's seven local screenshots reproduced the cropped-hip failure. The original independent IMAGE/0.6 extraction detected six poses, all rejected by the old hip gate; SLOUCH1 was missed by cold-start detection. Native MediaPipe 0.10.32 VIDEO/0.5 with the exact same lite model and 30 neutral warmup frames produced one pose on each of 30 repeated target frames for every image. These are repeated still-image probes, not independent video trials.
 
@@ -15,7 +36,7 @@ The user's seven local screenshots reproduced the cropped-hip failure. The origi
 | Production build | Strict TypeScript and Vite build passed; the updated classic worker includes front upper-body logic and 0.5 MediaPipe tracking defaults |
 | Updated served worker | Ports 8000 and 5173 both served the same **147,921-byte** compiled worker, SHA256 `7f83b4f129c03b14d11bd502b0cc101bd9bdd82bcd20ae4278b01e71d529d1c2`; classic parsing passed, dataset hashes were absent from app bundles, and production image/fixture URLs returned 404 |
 
-Actual dataset points, image/model hashes, extraction settings and limitations are recorded in [the local tuning workflow](../evaluation/pc_dataset.md). Run `npm --prefix frontend run evaluate:posture` for a fresh report with per-image predictions, geometry and confusion counts. The native CPU extraction validates real MediaPipe output on the supplied screenshots. A new live browser GPU/webcam pass is still required; tests and replay do not establish generalization to unseen people or real-time transitions.
+Actual dataset points, image/model hashes, extraction settings and limitations are recorded in [the local tuning workflow](../evaluation/pc_dataset.md). The earlier JavaScript evaluator has been replaced by `python -m evaluation.evaluate_pc_posture`. Tests and replay do not establish generalization to unseen people or real-time transitions.
 
 ## Initial PC camera / MediaPipe checks
 

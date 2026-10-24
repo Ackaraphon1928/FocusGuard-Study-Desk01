@@ -1,0 +1,8 @@
+# Optional native camera stack. Install alongside requirements.txt on the device.
+# Pi OS Bookworm 64-bit/Python 3.11 uses the available ARM64 Tasks wheel.
+mediapipe==0.10.18; platform_machine == "aarch64"
+numpy==1.26.4; platform_machine == "aarch64"
+opencv-contrib-python==4.10.0.84; platform_machine == "aarch64"
+# Desktop backend: same native Tasks release used in the local dataset extraction.
+mediapipe==0.10.32; platform_machine != "aarch64"
+opencv-contrib-python>=4.10,<6; platform_machine != "aarch64"

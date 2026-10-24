@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+﻿import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -70,14 +70,14 @@ describe('devices and network', () => {
     mountPage();
     const heading = await screen.findByRole('heading', { name: 'Local vision pipeline' });
     const vision = within(heading.parentElement!.parentElement!.parentElement!);
-    expect(vision.getByText('PC webcam · MediaPipe in browser')).toBeInTheDocument();
+    expect(vision.getByText('PC webcam · Python + MediaPipe')).toBeInTheDocument();
     expect(vision.getByText('PC camera online')).toBeInTheDocument();
-    expect(vision.getByText('HTTP · local posture metadata')).toBeInTheDocument();
-    expect(vision.getByText('/api/demo/vision')).toBeInTheDocument();
+    expect(vision.getByText('Python pipeline · derived metadata')).toBeInTheDocument();
+    expect(vision.getByText('/api/vision/status')).toBeInTheDocument();
     expect(vision.queryByText('Internal simulator')).not.toBeInTheDocument();
     expect(vision.queryByText('Simulated')).not.toBeInTheDocument();
     expect(screen.getAllByText('Internal simulator')).toHaveLength(3);
-    expect(screen.getByText(/PC webcam video and landmarks stay in your browser/)).toBeInTheDocument();
+    expect(screen.getByText(/Python captures the PC webcam/)).toBeInTheDocument();
   });
 
   it('keeps an unavailable Raspberry Pi pipeline distinct from the PC webcam demo', async () => {
@@ -85,7 +85,7 @@ describe('devices and network', () => {
     vi.stubGlobal('fetch', vi.fn(async () => Response.json(state)));
     mountPage();
     expect(await screen.findByText('Raspberry Pi · OpenCV + MediaPipe')).toBeInTheDocument();
-    expect(screen.queryByText('PC webcam · MediaPipe in browser')).not.toBeInTheDocument();
+    expect(screen.queryByText('PC webcam · Python + MediaPipe')).not.toBeInTheDocument();
     expect(screen.queryByText(/PC camera online|PC camera unavailable/)).not.toBeInTheDocument();
     expect(screen.getAllByText('MQTT · local network')).toHaveLength(4);
     expect(screen.getAllByText('No packets yet')).toHaveLength(4);

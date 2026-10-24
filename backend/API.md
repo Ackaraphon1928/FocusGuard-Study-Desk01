@@ -1,4 +1,4 @@
-# FocusGuard local API and decision rules
+﻿# FocusGuard local API and decision rules
 
 The backend runs on Python 3.11+ (verified here on Python 3.13) with FastAPI,
 SQLite, Paho MQTT and optional AWS Bedrock. The dashboard is served at `/` from
@@ -38,7 +38,14 @@ a trusted LAN with an authenticated reverse proxy. Broker credentials stay serve
 | POST | `/api/actuators` | Partial `{ "lamp_mode": "auto" \| "manual", "lamp_percent": 0..100, "fan_mode": "auto" \| "manual", "fan": true }`; specify manual mode for explicit levels |
 | POST | `/api/demo` | `{ "scenario": "normal" \| "slouch" \| "too_close" \| "dark" \| "noisy" \| "hot" \| "away" \| "camera_offline" \| "occluded" \| "network_offline" }` |
 | POST | `/api/demo/vision-source` | `{ "source": "simulated" \| "pc_camera" }`; demo only, returns current state |
-| POST | `/api/demo/vision` | Derived PC camera metadata described below; demo and PC source only |
+| POST | `/api/demo/vision` | Deprecated metadata-only compatibility input; blocked while Python owns vision |
+| GET | `/api/vision/status` | Python camera snapshot, derived observation and runtime diagnostics |
+| POST | `/api/vision/start` | `{ "camera_index": 0, "view": "front" }`; starts the camera attached to the backend |
+| POST | `/api/vision/stop` | `{}`; stops capture and clears vision availability without selecting fake vision |
+| POST | `/api/vision/calibrate` | `{}`; requests neutral calibration; 409 unless running |
+| POST | `/api/vision/view` | `{ "view": "front" \| "side" }`; resets the neutral baseline when changed |
+| POST | `/api/vision/preview` | `{ "enabled": true }`; explicit opt-in for local debug images, default false |
+| GET | `/api/vision/preview.mjpeg` | Optional in-memory MJPEG stream; 409 while preview disabled; same-origin only |
 | POST | `/api/mode` | `{ "mode": "demo" \| "hardware" }`; ends current session and clears source readings |
 | POST | `/api/telemetry` | `{ "topic": "focusguard/...", "payload": { ...derived metadata... } }`; hardware mode only |
 | POST | `/api/sessions/{id}/summary` | `{session_id,summary,summary_source,source,cloud_sent,aggregates,note}`; local fallback unless consent and Bedrock configured |
@@ -63,51 +70,106 @@ from mode-filtered queries. `/api/state` includes only current-mode events.
 New sessions and events also contain `vision_source`. Legacy records may omit it;
 do not interpret an absent source as a verified PC-camera observation.
 
-## PC camera demo input
+## Python camera processing
 
-The browser runs MediaPipe locally, then selects `pc_camera` only after its model
-is ready. `/api/demo/vision-source` ends any active session when the source changes,
-clears old vision evidence and returns the state. Switching to `simulated` is
-explicit. Hardware mode rejects both PC-demo routes with HTTP 409.
+The browser is a controller and viewer. Python captures the camera attached to the
+backend machine, runs MediaPipe, calibrates and classifies posture, then feeds
+derived metadata directly into the engine. No image uploads, browser camera API,
+Web Worker or frontend posture calculation is involved. Install the optional
+`backend/requirements-vision.txt` and verify the model with
+`python -m backend.vision.model --download`, or use `./start.ps1 -Install -Vision`.
+Native dependencies are imported lazily; the normal simulator works without them.
 
-`POST /api/demo/vision` requires `pc_camera` to be selected; otherwise it returns
-409. Its complete allowlist is:
+`POST /api/vision/start` accepts an integer `camera_index` from 0 through 16
+(default 0) and `view: front|side` (default front). It returns a snapshot while
+startup can continue asynchronously; poll status to observe running or error.
+Starting an already active identical configuration is idempotent. Stop before
+changing the camera index; a conflicting owner/configuration returns 409. Control
+operations are serialized and camera/model/classifier resources have one worker
+owner. Native initialization failures appear in the snapshot and terminal logs.
+
+In demo mode, Start selects `pc_camera`; environment, ToF, presence signals and
+outputs remain explicitly simulated. Simulated FSR/PIR presence follows fresh
+reliable camera presence, rather than manufacturing occupancy from unavailable
+vision. In hardware mode, direct Python camera observations feed `gateway` vision
+alongside real sensors. A mode change stops the old capture and clears evidence.
+Do not also run an independent gateway camera owner against the same device.
+
+`GET /api/vision/status` and every successful camera control return this shape:
 
 ```json
 {
-  "person_detected": true,
-  "posture": "GOOD",
-  "confidence": 0.92,
+  "status": "running",
+  "error": null,
+  "message": "Local Python camera processing on CPU. Calibrate while sitting upright.",
+  "delegate": "CPU",
+  "cameraIndex": 0,
+  "view": "front",
   "fps": 14.7,
-  "vision_available": true,
-  "inference_ms": 22.5,
-  "ambiguous_people": false
+  "inferenceMs": 22.5,
+  "frames": 120,
+  "updatedAt": "2026-10-24T01:00:00+00:00",
+  "previewEnabled": false,
+  "observation": {
+    "type": "result",
+    "landmarks": [],
+    "people": 1,
+    "fps": 14.7,
+    "inferenceMs": 22.5,
+    "width": 640,
+    "height": 480,
+    "result": {
+      "posture": "GOOD",
+      "candidate": "GOOD",
+      "personDetected": true,
+      "confidence": 0.92,
+      "geometry": {},
+      "calibration": {"status": "ready", "frames": 30, "required": 30},
+      "reason": "tracking_upper_body"
+    }
+  }
 }
 ```
 
-The first five fields are required. `inference_ms` and `ambiguous_people` are
-optional. Posture is `GOOD`, `SLOUCH`, `LEAN_FORWARD`, `LEAN_LEFT_RIGHT`,
-`NO_PERSON` or `UNKNOWN`. Confidence is 0–1, FPS 0–240, inference time 0–60000 ms;
-booleans are strict. Images, frames, keypoints, landmarks, arbitrary geometry and
-unknown fields return 422. The response contains `accepted`, `topic` and server
-receipt `timestamp`; the internal vision topic does not mean PC observations are
-published over MQTT.
+Status is `idle|loading|running|stopped|error`. Delegate is the actual `CPU|GPU` or
+null before initialization. Observation is null when no current result exists;
+geometry is null when unusable, otherwise a derived numerical diagnostic object.
+No raw normalized/world landmark arrays are exposed (`landmarks` is always empty).
+The panel polls at 500 ms; inference and engine updates do not wait for a browser.
+Calibration runs in Python over at least 30 reliable frames. Changing view resets
+that baseline. Confidence measures landmark reliability, not benchmark accuracy.
 
-The simulator continues environment/ToF inputs while leaving camera pose and FPS
-untouched. Simulated FSR/PIR presence follows fresh reliable camera presence;
-these are demo signals, not independent physical sensor evidence. Missing
-calibration/unknown posture carries zero usable confidence. Stopped or expired
-camera input clears posture to `UNKNOWN` and FPS to null, with no fake-vision
-fallback. Freshness uses `sensor_stale_seconds` (default 15 seconds). The browser
-also sends unavailable metadata on Stop, navigation or tab hiding. Explicit
-available `NO_PERSON` remains distinct from camera unavailability.
+The optional preview is a separate privacy boundary. `POST /api/vision/preview`
+with `enabled:true` enables server-rendered JPEG frames with skeleton/label text.
+Only then can `GET /api/vision/preview.mjpeg` return the local stream. It is
+same-origin restricted, no-store, and ends when capture stops or preview is
+disabled. Frames are held in memory and are not persisted or forwarded to cloud
+AI. Default monitoring needs only metadata. A camera started by the dashboard is
+stopped when it leaves/hides; observing an existing headless pipeline does not
+make navigation stop it. Hardware-only `VISION_AUTOSTART` supports continuous
+capture independently of any browser.
 
-With PC vision selected, `/api/demo` accepts `normal`, `dark`, `noisy`, `hot`,
-and `network_offline`. Camera/posture/away scenarios are rejected with 422 so
-synthetic scenarios cannot overwrite the real camera. Source changes separate
-session aggregates; history, sessions, events and CSV retain `vision_source`.
-See [PC_CAMERA.md](../docs/PC_CAMERA.md) for calibration, labels and limitations.
+Stop makes camera input unavailable and never silently resumes generated vision.
+In demo mode, `POST /api/demo/vision-source` with `source:simulated` explicitly
+stops local capture and restores simulation. Source changes split sessions;
+history, sessions, events and CSV preserve `vision_source`. With PC vision
+selected, scenario inputs are limited to `normal`, `dark`, `noisy`, `hot`, and
+`network_offline` so synthetic postures cannot overwrite observed camera data.
+Stopped/expired input yields `UNKNOWN` and null engine FPS. Explicit available
+`NO_PERSON` remains distinct from unavailability. `sensor_stale_seconds` controls
+engine freshness (default 15 seconds).
 
+The old `POST /api/demo/vision` remains a **deprecated compatibility/testing seam**.
+It requires demo mode and selected `pc_camera`, and returns 409 while the Python
+service is loading/running. Its allowlist is `person_detected` (boolean), `posture`
+(six-label enum), `confidence` (0–1), `fps` (0–240), `vision_available` (boolean),
+optional `inference_ms` (0–60000) and `ambiguous_people` (boolean). The first five
+are required. Raw frames, image/audio fields, keypoints and arbitrary geometry
+return 422. The React app does not call this route. The response is
+`{accepted,topic,timestamp}`; the internal topic is not evidence of MQTT delivery.
+
+See [PC_CAMERA.md](../docs/PC_CAMERA.md) for installation, labels, terminal logs,
+model provenance and PC/Pi limitations.
 ## State shape
 
 ```json
@@ -152,7 +214,7 @@ Active snapshots also expose break and eye-break countdowns.
 `vision_source` is `simulated`, `pc_camera` or `gateway`; `vision_last_seen` is
 the latest vision receipt timestamp or null. Vision device entries also expose
 `source`, and their `simulated` flag is false for a PC camera. Metrics report the
-current `vision_source` and measured camera FPS separately from synthetic inputs.
+current `vision_source` and measured camera FPS separately from synthetic inputs. `/api/state` also contains `vision_runtime` with camera status, actual delegate, camera index, view and preview-enabled state.
 
 Missing or stale numeric values are **null**, never fabricated zeros. Missing
 posture is `UNKNOWN`. Low pose confidence does not count as healthy posture.
@@ -223,6 +285,14 @@ engineering rules, not universal medical thresholds or a measure of mental focus
 | --- | --- |
 | FOCUSGUARD_MODE | `demo` or `hardware` |
 | FOCUSGUARD_DB | `backend/data/focusguard.sqlite3`; use `/app/data/focusguard.sqlite3` in Docker |
+| VISION_AUTOSTART | `false`; true starts direct camera capture at startup in hardware mode only |
+| CALIBRATION_FILE | Optional local numeric baseline file. Restore only when schema/view validate; save atomically after explicit calibration completes. Absent means memory-only calibration |
+| CAMERA_BACKEND | `opencv` for USB/default camera, or `picamera2` for the configured CSI stack |
+| CAMERA_INDEX / CAMERA_VIEW | `0` / `front` for headless autostart; dashboard Start supplies its own choices |
+| CAMERA_WIDTH / CAMERA_HEIGHT | `640` / `480` capture request; actual dimensions depend on the driver |
+| VISION_DELEGATE | `cpu` default; `gpu` or `auto` attempts GPU with logged CPU fallback |
+| POSE_MODEL | Optional local model path; checked against the pinned SHA256 |
+| FOCUSGUARD_LOG_LEVEL | `INFO`; `DEBUG` adds derived geometry; also accepts WARNING, ERROR, CRITICAL |
 | MQTT_ENABLED | `false`; true enables optional broker bridge |
 | MQTT_HOST / MQTT_PORT | `127.0.0.1` / `1883` |
 | MQTT_USERNAME / MQTT_PASSWORD | Optional broker credentials; never returned to browser |
@@ -298,7 +368,7 @@ prototype does not invent an external AI response.
 (including Uvicorn standard extras, excluding unrelated development tools).
 Install it with `python -m pip install -r backend/requirements.lock.txt` to repeat
 that environment, or use the smaller direct-dependency `requirements.txt` for
-another supported Python/platform. Hardware vision dependencies are separate.
+another supported Python/platform. Optional Python camera dependencies are in `requirements-vision.txt`; Pi hardware deployment has platform-specific pins. Terminal vision INFO logs show lifecycle, actual delegate, calibration, transitions and approximately two-second performance reports. DEBUG adds derived geometry without media.
 
 ## Deterministic testing seam
 

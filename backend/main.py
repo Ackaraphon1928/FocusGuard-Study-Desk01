@@ -11,13 +11,17 @@ import time
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from .engine import FocusGuardEngine
 from .integrations import InfluxWriter, MqttBridge, SummaryService
 from .storage import Store
+from .logging_config import configure_logging
+from .vision.service import LocalVisionService, unavailable_metadata
+
+VISION_TOPIC = "focusguard/gateway/vision"
 
 ROOT = Path(__file__).resolve().parent.parent
 log = logging.getLogger("focusguard")
@@ -25,6 +29,10 @@ log = logging.getLogger("focusguard")
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class EmptyRequest(StrictModel):
+    pass
 
 
 class ControlRequest(StrictModel):
@@ -56,13 +64,28 @@ class PcVisionRequest(StrictModel):
     ambiguous_people: bool = False
 
 
+class VisionStartRequest(StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    camera_index: int = Field(default=0, ge=0, le=16)
+    view: Literal["front", "side"] = "front"
+
+
+class VisionViewRequest(StrictModel):
+    view: Literal["front", "side"]
+
+
+class VisionPreviewRequest(StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    enabled: bool
+
+
 class TelemetryRequest(StrictModel):
     topic: str
     payload: dict[str, Any]
 
 
 class Runtime:
-    def __init__(self, db_path=None, mode=None):
+    def __init__(self, db_path=None, mode=None, vision_factory=None):
         self.store = Store(db_path or os.getenv("FOCUSGUARD_DB", str(ROOT / "backend" / "data" / "focusguard.sqlite3")))
         self.engine = FocusGuardEngine(self.store, mode=mode or os.getenv("FOCUSGUARD_MODE", "demo"), now=time.time())
         self.mqtt = MqttBridge(self.engine)
@@ -72,6 +95,56 @@ class Runtime:
         self.last_error = None
         self.event_cursor = self.store.latest_event_cursor()
         self.summary_tasks = {}
+        self.camera_mode = None
+        self.vision_controls = asyncio.Lock()
+        self.vision = (vision_factory or LocalVisionService)(self._receive_vision_metadata)
+
+    def _receive_vision_metadata(self, metadata):
+        """Native worker -> engine; obsolete workers cannot cross mode boundaries."""
+        with self.engine.lock:
+            if self.camera_mode is None or self.camera_mode != self.engine.mode:
+                return
+            if self.engine.mode == "demo" and self.engine.vision_source != "pc_camera":
+                return
+            now = time.time()
+            if self.engine.mode == "demo":
+                self.engine.ingest_pc_vision(metadata, now)
+            else:
+                self.engine.ingest(VISION_TOPIC, metadata, now)
+            point = self.engine.step(now)
+            if point:
+                self.influx.enqueue(point)
+
+    def start_vision(self, camera_index=0, view="front"):
+        snapshot = self.vision.snapshot()
+        if snapshot["status"] in {"loading", "running"}:
+            if snapshot["cameraIndex"] != camera_index or snapshot["view"] != view:
+                raise RuntimeError("Stop the active camera before changing its camera index or initial view")
+            return snapshot
+        if self.engine.mode == "demo":
+            self.engine.set_vision_source("pc_camera", time.time())
+        self.camera_mode = self.engine.mode
+        try:
+            return self.vision.start(camera_index=camera_index, view=view)
+        except Exception:
+            self._receive_vision_metadata(unavailable_metadata())
+            self.camera_mode = None
+            raise
+
+    def stop_vision(self):
+        with self.engine.lock:
+            owner = self.camera_mode
+            self.camera_mode = None
+            if owner == self.engine.mode and (owner == "hardware" or self.engine.vision_source == "pc_camera"):
+                now = time.time()
+                if owner == "demo":
+                    self.engine.ingest_pc_vision(unavailable_metadata(), now)
+                else:
+                    self.engine.ingest(VISION_TOPIC, unavailable_metadata(), now)
+                point = self.engine.step(now)
+                if point:
+                    self.influx.enqueue(point)
+        return self.vision.stop()
 
     async def process_events(self):
         """Forward each newly persisted event once, and schedule ended summaries.
@@ -110,6 +183,8 @@ class Runtime:
         state["health"]["influx_pending"] = len(self.influx.pending)
         state["health"]["influx_dropped"] = self.influx.dropped
         state["actuator_ack"] = self.mqtt.last_ack
+        snapshot = self.vision.snapshot()
+        state["vision_runtime"] = {key: snapshot[key] for key in ("status", "delegate", "cameraIndex", "view", "previewEnabled")}
         return state
 
     async def loop(self):
@@ -130,10 +205,11 @@ class Runtime:
             await asyncio.sleep(.25)
 
 
-def create_app(db_path=None, mode=None, background=True, frontend_dir=None):
+def create_app(db_path=None, mode=None, background=True, frontend_dir=None, vision_factory=None):
     @asynccontextmanager
     async def lifespan(application):
-        runtime = Runtime(db_path, mode)
+        configure_logging()
+        runtime = Runtime(db_path, mode, vision_factory)
         application.state.runtime = runtime
         runtime.mqtt.start()
         runtime.influx.start()
@@ -142,8 +218,14 @@ def create_app(db_path=None, mode=None, background=True, frontend_dir=None):
             runtime.influx.enqueue(point)
         task = asyncio.create_task(runtime.loop()) if background else None
         try:
+            if os.getenv("VISION_AUTOSTART", "false").lower() == "true":
+                if runtime.engine.mode != "hardware":
+                    log.warning("VISION_AUTOSTART ignored in demo mode; start the camera explicitly from the dashboard")
+                else:
+                    runtime.start_vision(int(os.getenv("CAMERA_INDEX", "0")), os.getenv("CAMERA_VIEW", "front"))
             yield
         finally:
+            await asyncio.to_thread(runtime.stop_vision)
             if task:
                 task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -181,6 +263,65 @@ def create_app(db_path=None, mode=None, background=True, frontend_dir=None):
 
     def runtime():
         return application.state.runtime
+
+    @application.get("/api/vision/status")
+    async def vision_status():
+        return runtime().vision.snapshot()
+
+    @application.post("/api/vision/start")
+    async def vision_start(data: VisionStartRequest):
+        async with runtime().vision_controls:
+            try:
+                result = await asyncio.to_thread(runtime().start_vision, data.camera_index, data.view)
+            except RuntimeError as exc:
+                raise HTTPException(409, str(exc))
+            await runtime().process_events()
+            return result
+
+    @application.post("/api/vision/stop")
+    async def vision_stop(data: EmptyRequest = EmptyRequest()):
+        async with runtime().vision_controls:
+            result = await asyncio.to_thread(runtime().stop_vision)
+            await runtime().process_events()
+            return result
+
+    @application.post("/api/vision/calibrate")
+    async def vision_calibrate(data: EmptyRequest = EmptyRequest()):
+        async with runtime().vision_controls:
+            try:
+                return runtime().vision.calibrate()
+            except RuntimeError as exc:
+                raise HTTPException(409, str(exc))
+
+    @application.post("/api/vision/view")
+    async def vision_view(data: VisionViewRequest):
+        async with runtime().vision_controls:
+            return runtime().vision.set_view(data.view)
+
+    @application.post("/api/vision/preview")
+    async def vision_preview(data: VisionPreviewRequest):
+        async with runtime().vision_controls:
+            return runtime().vision.set_preview(data.enabled)
+
+    @application.get("/api/vision/preview.mjpeg", include_in_schema=False)
+    async def vision_preview_stream(request: Request):
+        origin = request.headers.get("origin")
+        if request.headers.get("sec-fetch-site") == "cross-site" or (origin and origin.rstrip("/") != str(request.base_url).rstrip("/")):
+            raise HTTPException(403, "Camera preview is restricted to this dashboard origin")
+        if not runtime().vision.snapshot()["previewEnabled"]:
+            raise HTTPException(409, "Enable the optional local camera preview first")
+
+        async def frames():
+            while not await request.is_disconnected():
+                snapshot = runtime().vision.snapshot()
+                if not snapshot["previewEnabled"] or snapshot["status"] not in {"loading", "running"}:
+                    break
+                jpeg = runtime().vision.preview_jpeg()
+                if jpeg:
+                    yield b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: " + str(len(jpeg)).encode() + b"\r\n\r\n" + jpeg + b"\r\n"
+                await asyncio.sleep(.1)
+        return StreamingResponse(frames(), media_type="multipart/x-mixed-replace; boundary=frame",
+                                 headers={"Cache-Control": "no-store", "Cross-Origin-Resource-Policy": "same-origin", "X-Accel-Buffering": "no"})
 
     @application.get("/api/state")
     async def state():
@@ -237,12 +378,17 @@ def create_app(db_path=None, mode=None, background=True, frontend_dir=None):
     async def vision_source(data: VisionSourceRequest):
         if runtime().engine.mode != "demo":
             raise HTTPException(409, "PC camera demo requires demo mode")
-        result = runtime().engine.set_vision_source(data.source, time.time())
-        await runtime().process_events()
-        return result
+        async with runtime().vision_controls:
+            if data.source == "simulated":
+                await asyncio.to_thread(runtime().stop_vision)
+            result = runtime().engine.set_vision_source(data.source, time.time())
+            await runtime().process_events()
+            return result
 
-    @application.post("/api/demo/vision")
+    @application.post("/api/demo/vision", deprecated=True)
     async def pc_vision(data: PcVisionRequest):
+        if runtime().vision.snapshot()["status"] in {"loading", "running"}:
+            raise HTTPException(409, "The Python camera owns vision input; external posture updates are disabled")
         engine = runtime().engine
         if engine.mode != "demo" or engine.vision_source != "pc_camera":
             raise HTTPException(409, "Select PC camera vision in demo mode before sending pose metadata")
@@ -256,13 +402,16 @@ def create_app(db_path=None, mode=None, background=True, frontend_dir=None):
 
     @application.post("/api/mode")
     async def mode_change(data: ModeRequest):
-        # An explicit safe command clears physical outputs before demo mode.
-        if runtime().engine.mode == "hardware" and data.mode == "demo":
-            runtime().engine.actuators.update(lamp_percent=0, fan=False, buzzer=False)
-            runtime().mqtt.publish(time.time())
-        result = runtime().engine.set_mode(data.mode, time.time())
-        await runtime().process_events()
-        return result
+        async with runtime().vision_controls:
+            if data.mode != runtime().engine.mode:
+                await asyncio.to_thread(runtime().stop_vision)
+            # An explicit safe command clears physical outputs before demo mode.
+            if runtime().engine.mode == "hardware" and data.mode == "demo":
+                runtime().engine.actuators.update(lamp_percent=0, fan=False, buzzer=False)
+                runtime().mqtt.publish(time.time())
+            result = runtime().engine.set_mode(data.mode, time.time())
+            await runtime().process_events()
+            return result
 
     @application.post("/api/telemetry")
     async def telemetry(data: TelemetryRequest):

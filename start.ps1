@@ -5,7 +5,10 @@ param(
     [ValidateSet('demo', 'hardware')]
     [string]$Mode = 'demo',
     [switch]$Install,
-    [switch]$Build
+    [switch]$Build,
+    [switch]$Vision,
+    [ValidateSet('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL')]
+    [string]$LogLevel = 'INFO'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,16 +26,23 @@ if ($Install) {
 }
 & $pythonPath -c "import fastapi, uvicorn"
 if ($LASTEXITCODE -ne 0) { throw 'Dependencies are missing. Run .\start.ps1 -Install.' }
+if ($Vision) {
+    & $pythonPath -c "import mediapipe, cv2"
+    if ($Install -or $LASTEXITCODE -ne 0) {
+        Write-Host 'Installing the native Python camera dependencies...'
+        & $pythonPath -m pip install -r backend/requirements-vision.txt
+        if ($LASTEXITCODE -ne 0) { throw 'Native vision installation failed. See backend/requirements-vision.txt for supported platforms.' }
+    }
+    & $pythonPath -m backend.vision.model --download
+    if ($LASTEXITCODE -ne 0) { throw 'Pose model setup failed. Check the hash or network error above.' }
+}
 
 $frontendPath = Join-Path $PSScriptRoot 'frontend'
 $builtIndex = Join-Path $frontendPath 'dist\index.html'
-$builtPoseWorker = Join-Path $frontendPath 'dist\vision\pose.worker.js'
-$builtPoseModel = Join-Path $frontendPath 'dist\vision\pose_landmarker_lite.task'
-$needsBuild = $Build -or $Install -or -not (Test-Path -LiteralPath $builtIndex) -or -not (Test-Path -LiteralPath $builtPoseWorker) -or -not (Test-Path -LiteralPath $builtPoseModel)
+$needsBuild = $Build -or $Install -or -not (Test-Path -LiteralPath $builtIndex)
 if (-not $needsBuild) {
     $builtAt = (Get-Item -LiteralPath $builtIndex).LastWriteTimeUtc
     $sourceFiles = @(Get-ChildItem -LiteralPath (Join-Path $frontendPath 'src') -Recurse -File)
-    $sourceFiles += Get-ChildItem -LiteralPath (Join-Path $frontendPath 'scripts') -Recurse -File
     $sourceFiles += Get-ChildItem -LiteralPath $frontendPath -File | Where-Object {
         $_.Name -eq 'index.html' -or $_.Extension -in '.json', '.ts', '.js'
     }
@@ -65,7 +75,8 @@ if ($needsBuild) {
     finally { Pop-Location }
 }
 $env:FOCUSGUARD_MODE = $Mode
+$env:FOCUSGUARD_LOG_LEVEL = $LogLevel
 Write-Host "FocusGuard: http://127.0.0.1:$Port ($Mode mode)"
 Write-Host 'Press Ctrl+C to stop. Sensor metadata and sessions are stored locally.'
-& $pythonPath -m uvicorn backend.main:app --host 127.0.0.1 --port $Port
+& $pythonPath -m uvicorn backend.main:app --host 127.0.0.1 --port $Port --no-access-log
 exit $LASTEXITCODE

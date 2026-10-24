@@ -1,0 +1,20 @@
+FocusGuard local Python pose processing
+
+MediaPipe is developed by Google and distributed under Apache License 2.0.
+The project uses the unmodified BlazePose GHUM Pose Landmarker Lite model:
+https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task
+SHA256: 59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a
+
+Model family, license and intended-use information:
+https://storage.googleapis.com/mediapipe-assets/Model%20Card%20BlazePose%20GHUM%203D.pdf
+MediaPipe Tasks source:
+https://github.com/google-ai-edge/mediapipe
+
+The model is prepared explicitly with python -m backend.vision.model --download.
+Images are processed on the camera device. Optional preview is transient and
+enabled explicitly; it is not a recording or cloud inference service.
+The geometric posture rules are FocusGuard prototype heuristics and do not
+establish clinical accuracy or an assessment of attention.
+
+See LICENSE-MEDIAPIPE.txt for the Apache License 2.0 text. Python package
+distributions retain their own license and third-party notices.

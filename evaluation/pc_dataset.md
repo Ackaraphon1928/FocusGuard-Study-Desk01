@@ -1,65 +1,74 @@
-# Local PC posture tuning evidence
+# Local posture tuning and Python migration evidence
 
-[The frontend test fixture](../frontend/src/test/fixtures/pc-dataset.landmarks.json) contains real numeric Pose Landmarker output for the seven user-provided `IMG_dataset/*.png` files. It includes file SHA256s, dimensions, all 33 normalized/world landmarks, visibility/presence scores, upper-body diagnostics, and inference settings. Keeping this fixture inside `frontend/` lets standalone frontend/Docker builds typecheck the same tests without depending on a parent directory. It is not imported by application code or copied into the production assets. Source images stay local, remain ignored by Git, and are excluded from Docker context and browser assets; they are not uploaded to an inference service.
+[The canonical fixture](fixtures/pc-dataset.landmarks.json) contains real numeric MediaPipe observations extracted from seven user-provided `IMG_dataset/*.png` screenshots. It records file SHA256s, dimensions, 33 normalized/world landmarks, visibility/presence, diagnostics and inference settings. It is used only by Python regression tests/evaluation, and is excluded from production assets. Source images remain local, ignored by Git and excluded from Docker context.
 
-This is a **tuning fixture**, with one GOOD reference and six labeled posture examples. The same examples guide the heuristic changes and their regression checks. Passing those checks measures agreement on these examples, not accuracy on new people, independent camera trials, or medical posture assessment.
+There is one GOOD reference and six posture examples from one person. These examples guided the accepted heuristics; the GOOD calibration image is also the GOOD regression sample. Agreement on them is a **tuning regression**, not held-out accuracy, a live-camera benchmark or medical posture assessment.
 
-## Reproduce on Windows
+## Run the canonical classifier regression
 
-The recorded environment is Python 3.13.9 with native CPU MediaPipe Tasks **0.10.32**, the same release number as the browser SDK. Native CPU inference is not guaranteed to match browser GPU/WASM inference. The extractor verifies the exact Lite model SHA256 before inference:
+From the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m evaluation.evaluate_pc_posture
+```
+
+The CLI imports the production `backend/vision/posture.py` classifier. It calibrates with 30 replays of the GOOD reference, then replays each target through temporal stabilization. The default output is `evaluation/results/pc-dataset/report.json`, with predictions, reliability, geometry and a confusion matrix. `--input` and `--output` select alternate files. This replay needs only Python's standard library; it does not open a camera or run MediaPipe inference.
+
+The frozen fixture retains **7/7** supplied labels after the Python migration. The canonical Python rules matched the archived accepted TypeScript implementation on **6,300 frame outputs across 60 deterministic sequences**, including full/upper body, world depth, view changes, jitter, absence and ambiguity; numeric tolerance was `1e-12`. No thresholds were retuned for the migration.
+
+`tests/test_posture.py` has **87 passing tests** covering the classifier, dataset/mirroring/jitter/scale checks, calibration persistence and mocked Pi runtime. These controlled checks are not additional independent photographs or hardware trials. Both the PC backend and actual Pi gateway import this same classifier; the frontend retains display types only.
+
+## Extract fresh native MediaPipe observations
+
+The recorded desktop environment is Windows x64, Python 3.13.9, MediaPipe Tasks `0.10.32`, OpenCV `5.0.0.93` and NumPy `2.5.4`. Install the optional native stack into the existing application venv and deliberately verify/download the model:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements-vision.txt
+.\.venv\Scripts\python.exe -m backend.vision.model --download
+.\.venv\Scripts\python.exe -m evaluation.extract_pc_dataset --confidence 0.5 --video-frames 30 --output evaluation/results/pc-dataset/fresh.landmarks.json
+.\.venv\Scripts\python.exe -m evaluation.evaluate_pc_posture --input evaluation/results/pc-dataset/fresh.landmarks.json --output evaluation/results/pc-dataset/fresh.report.json
+```
+
+The separate output preserves the frozen regression fixture. The extractor defaults to the canonical fixture path when `--output` is omitted, so replace it only deliberately. `backend.vision.model.ensure_model` resolves a verified backend/Pi model; no frontend WASM/worker preparation is required. The pinned Lite model SHA256 is:
 
 ```text
 59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a
 ```
 
-Prepare browser assets using the frontend's existing `npm run prepare:vision` if the model is missing. From the repository root:
+Each target is preceded by 30 repeated GOOD frames, followed by 30 repeated target frames at 67 ms timestamp intervals. The JSON retains the last target observation without replacing failed detections or inventing points, plus target pose counts. All seven targets yielded one pose on all 30 target frames in the original frozen extraction. Tracking state, package/platform and input sequencing can change newly extracted observations; fresh extraction is distinct from replaying the saved coordinates.
+
+Repeated stills are tracking probes, not independent trials or real posture transitions. Input screenshots include browser overlays, which remain part of the pixels. The extractor deliberately pins the desktop SDK; the Pi's supported ARM64 stack uses MediaPipe `0.10.18` and needs separate target-device validation. See [hardware setup](../docs/HARDWARE.md).
+
+## Actual native service probe
+
+A separate Windows CPU probe exercised `LocalVisionService` and native VIDEO inference with an injected image camera: GOOD calibration to ready, one second of GOOD before each target, then 3.5 seconds of that target with a 67 ms artificial read delay. This tested the native service path without accessing a physical webcam.
+
+| Screenshot | Expected | Native service result |
+|---|---|---|
+| GOOD | GOOD | GOOD |
+| LEAN_FORWARD | LEAN_FORWARD | LEAN_FORWARD |
+| LEAN_FORWARD2 | LEAN_FORWARD | LEAN_FORWARD |
+| LEAN_LEFT_RIGHT | LEAN_LEFT_RIGHT | LEAN_LEFT_RIGHT |
+| LEAN_LEFT_RIGHT2 | LEAN_LEFT_RIGHT | LEAN_LEFT_RIGHT |
+| SLOUCH1 | SLOUCH | UNKNOWN (`cropped_pose`) |
+| SLOUCH2 | SLOUCH | SLOUCH |
+
+That run matched **6/7**. Fresh native tracking placed required shoulders at the bottom edge with low presence in extreme SLOUCH1. A follow-up of 60 target frames produced 33 rejected observations (`cropped_pose`/`unreliable_landmarks`); valid candidates were intermittent, so none met continuous temporal evidence. The accepted rules retain UNKNOWN when required evidence is unreliable. They were not relaxed to force the label.
+
+The service's normal observation carried no landmark arrays, and the injected camera was released at stop. Probe FPS included artificial input delay and is not a device performance result. Neither the 7/7 frozen replay nor the 6/7 native probe establishes accuracy on new people, live webcam behavior, Pi throughput or GPU acceleration. No new physical camera/Pi tests were performed during this migration.
+
+## Why the original logic returned UNKNOWN
+
+`pc_dataset.baseline.json` preserves independent IMAGE inference with the original `0.6` detection/presence/tracking thresholds. Six images yielded a pose, all with both hips outside the image and reliability below `0.016`; the original visible-hip gate rejected them. SLOUCH1 yielded no pose at that setting. Diagnostic IMAGE runs at 0.5/0.4 still missed SLOUCH1; 0.3 also missed it while adding a false second pose elsewhere. Lowering detector thresholds alone was insufficient.
+
+The accepted Front rules instead use reliable head/shoulders, a personal upright baseline and additional facial pitch/roll when available. Upper-body points require visibility at least 0.6, presence at least 0.5 and `sqrt(visibility × presence)` at least 0.6. Inferred off-frame hips do not veto that evidence. Calibration requires 30 stable reliable observations over at least 1.2 seconds, tolerates brief interruptions up to 700 ms, and uses median geometry. Known label changes require 600 ms of continuous evidence; absence/uncertainty clears retained labels immediately.
+
+SLOUCH1 represents lowered head/rounded upper body; the user's SLOUCH2 example is reclined with a raised chin. The demo labels follow these supplied relative head/neck examples; they do not measure spinal curvature. Test these distinctions on independent people and camera placements using [the evaluation protocol](README.md).
+
+To reproduce the original IMAGE baseline separately:
 
 ```powershell
-.\.venv\Scripts\python.exe -m venv .tools\vision-eval
-.\.tools\vision-eval\Scripts\python.exe -m pip install -r evaluation\pc_dataset.requirements.txt
-.\.tools\vision-eval\Scripts\python.exe evaluation\extract_pc_dataset.py --confidence 0.5 --video-frames 30
+.\.venv\Scripts\python.exe -m evaluation.extract_pc_dataset --confidence 0.6 --video-frames 0 --output evaluation/results/pc-dataset/image-baseline.json
 ```
 
-Each target is preceded by 30 repeated GOOD frames, followed by 30 repeated target frames at 67 ms timestamp intervals. The JSON stores the **last target frame**, without replacing missing detections or synthesizing points. It records every target-frame pose count and whether the last five counts are stable. All seven targets produced one pose on each of their 30 target frames in the recorded run. The Tasks API does not expose separate detector versus tracker invocation counts.
-
-Repeated still frames are a tracking probe. They are not independent observations, real transitions, or a live video benchmark. The input contains browser screenshot overlays; those overlays remain part of the input pixels.
-
-## Why the original classifier returned UNKNOWN
-
-`pc_dataset.baseline.json` preserves independent IMAGE inference with the original `0.6` detection/presence/tracking thresholds. Six images yield a pose; every one has both hips outside the image with reliability below `0.016`. The original requirement for visible, reliable hips therefore rejects every detected example before posture classification. SLOUCH1 yields no pose in independent IMAGE mode at that setting.
-
-The fix should use visible head/shoulder geometry for a desk webcam, retain reliability checks on the points actually used, and calibrate against a neutral upper-body reference. Inferred hips outside the image provide no reliable torso geometry.
-
-Diagnostic IMAGE runs at 0.5 and 0.4 still miss SLOUCH1. Lowering to 0.3 also misses it and produces a second false pose in LEAN_FORWARD. Therefore a blanket reduction of thresholds is insufficient. The recorded VIDEO probe with 0.5 thresholds and a neutral warmup obtains tracked SLOUCH1 landmarks. Its weaker shoulder has visibility `0.952`, presence `0.570`; a strict `min(visibility, presence) >= 0.6` gate still discards that shoulder.
-
-The final VIDEO 0.5 normalized facial pitch `(noseY - meanEyeY) / (meanMouthY - meanEyeY)` is:
-
-| Image | Pitch ratio |
-|---|---:|
-| GOOD | 0.499 |
-| LEAN_FORWARD | 0.608 |
-| LEAN_FORWARD2 | 0.538 |
-| LEAN_LEFT_RIGHT | 0.547 |
-| LEAN_LEFT_RIGHT2 | 0.674 |
-| SLOUCH1 | 0.634 |
-| SLOUCH2 | 0.375 |
-
-These overlapping values require other calibrated geometry and temporal evidence. SLOUCH1 shows a lowered head/rounded upper body; the user's SLOUCH2 example is reclined with a raised chin. In this demo the SLOUCH label follows those supplied head/neck deviation examples, rather than claiming that the cropped camera measures spinal curvature.
-
-## Run the production classifier regression
-
-```powershell
-npm --prefix frontend run evaluate:posture
-```
-
-The command bundles and executes the actual TypeScript classifier, calibrates by replaying the one GOOD reference, then replays each extracted target through temporal stabilization. It writes `evaluation/results/pc-dataset/report.json`, including per-image predictions, confidence, feature values and a confusion matrix. The recorded tuned result agrees with all **7/7** supplied labels. The GOOD calibration image is also the GOOD regression sample; this is deliberately labeled a tuning regression, with no held-out accuracy claim.
-
-The frontend tests additionally check mirrored coordinates, one-pixel jitter, uniform approach/recede without a posture change, missing core points, and upper/full-body tracking continuity. These controlled variations are regression checks, not additional independent labeled photographs.
-
-Reproduce the original baseline separately:
-
-```powershell
-.\.tools\vision-eval\Scripts\python.exe evaluation\extract_pc_dataset.py --confidence 0.6 --video-frames 0 --output evaluation\pc_dataset.baseline.json
-```
-
-Official references: [MediaPipe 0.10.32 package](https://pypi.org/project/mediapipe/0.10.32/) and [Pose Landmarker Python guide](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/python).
+References: [MediaPipe Pose Landmarker Python guide](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/python), [desktop SDK release](https://pypi.org/project/mediapipe/0.10.32/) and [Pi ARM64 SDK release files](https://pypi.org/project/mediapipe/0.10.18/#files).

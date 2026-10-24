@@ -7,6 +7,7 @@ metadata; the same rules run in both simulator and hardware modes.
 from copy import deepcopy
 from datetime import datetime, timezone
 import math
+import logging
 import threading
 import uuid
 
@@ -132,6 +133,10 @@ class FocusGuardEngine:
             raise ValueError("Invalid event vision source")
         data = {"id": uuid.uuid4().hex, "event_type": event_type, "severity": severity, "message": message, "timestamp": iso(now), "mode": self.mode, "vision_source": vision_source, **metadata}
         self.store.save_event(data, now)
+        logger = logging.getLogger("focusguard.engine")
+        logger.log(logging.WARNING if severity in {"warning", "critical"} else logging.INFO,
+                   "event=%s mode=%s vision=%s session=%s message=%s", event_type, self.mode,
+                   vision_source, metadata.get("session_id", "-"), message)
         return data
 
     def ingest(self, topic, payload, now):
@@ -694,4 +699,4 @@ class FocusGuardEngine:
     def observed_metrics(self):
         with self.lock:
             latencies = sorted(self.metrics["latencies_ms"])
-            return {"telemetry_messages": self.metrics["telemetry_messages"], "invalid_messages": self.metrics["invalid_messages"], "observed_fps": self.sensors["fps"], "vision_source": self.vision_source, "vision_confidence": self.sensors["confidence"], "ingestion_latency_ms": {"mean": round(sum(latencies) / len(latencies), 2) if latencies else None, "p95": round(latencies[max(0, math.ceil(.95 * len(latencies)) - 1)], 2) if latencies else None, "samples": len(latencies), "note": "Publisher timestamp to gateway receipt; synchronized clocks required. Simulator has no measured hardware latency."}, "warning_counts": deepcopy(self.metrics["warning_counts"]), "posture_accuracy": None, "distance_mae_cm": None, "note": ("PC camera FPS is measured locally; environment, seat, motion and distance remain simulated. " if self.vision_source == "pc_camera" else "") + "Accuracy and MAE require labeled ground truth; no benchmark values are fabricated.", "mode": self.mode}
+            return {"telemetry_messages": self.metrics["telemetry_messages"], "invalid_messages": self.metrics["invalid_messages"], "observed_fps": self.sensors["fps"], "vision_source": self.vision_source, "vision_confidence": self.sensors["confidence"], "ingestion_latency_ms": {"mean": round(sum(latencies) / len(latencies), 2) if latencies else None, "p95": round(latencies[max(0, math.ceil(.95 * len(latencies)) - 1)], 2) if latencies else None, "samples": len(latencies), "note": "Publisher timestamp to gateway receipt; synchronized clocks required. Simulator has no measured hardware latency."}, "warning_counts": deepcopy(self.metrics["warning_counts"]), "posture_accuracy": None, "distance_mae_cm": None, "note": ("PC camera FPS is measured by the Python backend; environment, seat, motion and distance remain simulated. " if self.vision_source == "pc_camera" else "") + "Accuracy and MAE require labeled ground truth; no benchmark values are fabricated.", "mode": self.mode}

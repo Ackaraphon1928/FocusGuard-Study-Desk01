@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+﻿import { useRef, useState, type ReactNode } from 'react';
 import { ArrowRight, Camera, Check, Fan, LampDesk, LockKeyhole, SlidersHorizontal } from 'lucide-react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm, useWatch, type FieldErrors, type UseFormRegister } from 'react-hook-form';
@@ -173,14 +173,14 @@ function PreferencesForm({ state }: { state: DeskState }) {
         <div className="space-y-6">
           <SettingsSection title="Keep it close. Keep it private." description="Privacy is the default behavior of your desk.">
             <div className="mb-5 flex items-center justify-center gap-3 rounded-xl bg-stone-50 p-4 text-xs text-stone-600"><Camera className="size-4 text-emerald-700" /><span>Local camera</span><ArrowRight className="size-4 text-stone-400" /><span>Pose metadata</span></div>
-            <div className="mb-5 flex items-start justify-between gap-3"><div><p className="text-sm font-semibold text-stone-800">Local camera processing</p><p className="mt-1 text-xs leading-relaxed text-stone-500">Raw frames stay in the capturing PC browser or Raspberry Pi. No video upload or audio recording.</p></div><Badge tone="good">Local only</Badge></div>
+            <div className="mb-5 flex items-start justify-between gap-3"><div><p className="text-sm font-semibold text-stone-800">Local camera processing</p><p className="mt-1 text-xs leading-relaxed text-stone-500">Python captures and processes frames on the backend PC or Raspberry Pi. Camera images reach the dashboard only when the local debug preview is enabled. No recording.</p></div><Badge tone="good">Local only</Badge></div>
             <SettingToggle name="cloud_ai_consent" title="Optional AI session summaries" description="Allow aggregate session statistics to be sent to AWS Bedrock. Off by default. Requires server credentials." register={register} />
             <p className="mt-5 text-xs leading-relaxed text-stone-400">Without cloud AI, your session statistics and local rule-based summaries remain available.</p>
           </SettingsSection>
           <DeskControls key={state.mode} actuators={state.actuators} mode={state.mode} />
           <SettingsSection title="Camera calibration" description="Sit upright at your usual distance with your head and shoulders visible. Hips are optional for the front PC webcam.">
-            <p className="mb-4 text-xs leading-relaxed text-stone-500">For the PC demo, open the camera lab, choose Front or Side, start the camera and select Calibrate upright posture. Hold still until calibration completes. Front view supports an upper-body frame at a desk; a side view benefits from a visible shoulder and hip. The neutral baseline stays in browser memory.</p>
-            <a href="#/overview" className="mb-5 inline-flex text-xs font-semibold text-pine underline underline-offset-4">Open PC camera lab</a>
+            <p className="mb-4 text-xs leading-relaxed text-stone-500">Open the Python camera lab, choose Front or Side and the backend camera index, then start and select Calibrate upright posture. Hold still until calibration completes. Front view supports an upper-body frame at a desk; a side view benefits from a visible shoulder and hip. The neutral baseline stays in Python memory.</p>
+            <a href="#/overview" className="mb-5 inline-flex text-xs font-semibold text-pine underline underline-offset-4">Open Python camera lab</a>
             <p className="mb-2 text-xs text-stone-500">For the Raspberry Pi hardware gateway:</p>
             <code className="block overflow-x-auto rounded-xl bg-stone-900 p-4 text-xs leading-relaxed text-stone-100">python -m raspberry_pi.gateway --calibrate --preview</code>
             <p className="mt-4 text-xs leading-relaxed text-stone-400">Recalibrate after changing camera position, view or your normal seating position. Front-view forward lean and slouch use relative size and head/shoulder geometry; they do not measure absolute depth or spine curvature.</p>

@@ -1,4 +1,9 @@
-"""Explainable image-plane geometry; thresholds are personal, not clinical."""
+"""Deprecated legacy geometry, retained only for old evaluation/CSV consumers.
+
+The active gateway and PC camera both use backend.vision.posture. Do not add
+new runtime rules here; legacy calibration files must be recalibrated using
+the canonical classifier before they can drive the gateway.
+"""
 from __future__ import annotations
 
 import json

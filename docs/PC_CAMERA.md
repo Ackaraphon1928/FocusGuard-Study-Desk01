@@ -1,68 +1,110 @@
-# PC camera and MediaPipe posture demo
+﻿# Python camera and MediaPipe posture processing
 
-This demo uses the webcam attached to the computer running the browser. MediaPipe Tasks Vision **0.10.32** detects body landmarks in a local browser worker; FocusGuard derives posture labels from landmark geometry relative to an upright calibration. Use a current desktop Chrome or Edge with WebAssembly and OffscreenCanvas support. It does not require a Raspberry Pi, Python MediaPipe installation, Docker or a cloud account.
+Camera capture, MediaPipe landmark extraction, calibration, posture classification and temporal stabilization run in **Python on the backend machine**. Today that machine can be your PC with its webcam; the same pipeline can run on a Raspberry Pi 5. React only sends controls and displays results. Opening the dashboard on another computer does not select that computer's webcam.
+
+The canonical classifier is `backend/vision/posture.py`. The standalone Pi gateway imports the same classifier rather than maintaining different posture rules. The frontend's `posture.ts` contains display types only; there is no browser MediaPipe SDK, WASM runtime, worker, camera permission flow or client-side classifier.
+
+## Install and start on the PC
+
+From the project root in PowerShell:
+
+```powershell
+.\start.ps1 -Install -Vision
+```
+
+This provisions the normal application and optional Python vision dependencies. Subsequent starts can use ` .\start.ps1 -Vision`. A sensor-only simulator still works without the optional vision dependencies. To set up vision manually in an existing application environment:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r backend/requirements-vision.txt
+.\.venv\Scripts\python.exe -m backend.vision.model --download
+.\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+```
+
+On Linux, substitute `.venv/bin/python`. No camera opens during dependency installation or model verification. The first explicit model download needs network access; runtime inference uses a verified local model and never downloads one implicitly.
 
 ## Start and calibrate
 
-1. Run `./start.ps1 -Install` from the project root on the first run, or `./start.ps1 -Build` after updating this checkout. Open <http://127.0.0.1:8000>. For development, run the API at port 8000 and `npm --prefix frontend run dev`, then open <http://127.0.0.1:5173>.
-2. Keep **demo mode** selected. On Overview, find **PC camera · pose lab** and choose **Front** or **Side** to match the camera position. For a front PC webcam, frame one person with the **head and both shoulders visible**. Hips may stay behind the desk. Keep the camera fixed and use bright, even light. A side/profile view benefits from a visible shoulder and hip and offers a clearer image-plane view of torso lean.
-3. Click **Start PC camera**, then allow the browser's camera permission. The camera is requested only after this click; audio is not requested. Initialization loads the local WASM runtime and lite pose model.
-4. Sit upright at your usual desk distance, look ahead, and click **Calibrate upright posture**. Keep still until the sample counter completes and the status becomes **Calibrated**. The baseline requires at least 30 reliable frames over a real observation interval; brief tracking interruptions need not discard all progress. Recalibrate after changing the view, camera position or normal seating position. The preview shows the skeleton, current posture label and observed processing rate.
-5. In Front view, try sustained lateral tilt, moving your upper body forward, lowering your head, and reclining. Watch **Local tracking diagnostics**: `Upper body · head + shoulders` means hips are not needed; `Full body · hips available` means torso geometry is also usable. The tracking reason explains waiting for calibration, cropped head/shoulders, unreliable points or multiple people. `UNKNOWN` remains appropriate while calibration is incomplete or evidence is unusable. Dashboard warnings use the existing sustained-duration rules and cooldowns.
-6. Click **Stop camera** to release the webcam. Navigation away from Overview or hiding the tab also stops capture. Start it explicitly again when returning. Stopping leaves PC vision selected and marks vision unavailable; **Use simulated vision** explicitly restores generated demo postures.
+1. Open <http://127.0.0.1:8000/#/overview> and find **Python camera · pose lab**. Choose the **Backend camera index**, normally Camera 0, and **Front** or **Side**. Close other applications that hold that camera. The camera must be attached to the backend PC or Pi.
+2. Click **Start backend camera**. Python opens the device and loads MediaPipe. No browser camera permission is needed. The panel reports the actual CPU/GPU delegate, FPS and inference time received from Python.
+3. In Front view, frame one person with the **head and both shoulders visible**. Hips may stay behind the desk. A Side view benefits from a visible shoulder and hip. Keep the camera fixed with even lighting.
+4. Sit upright at your usual desk distance, look ahead and click **Calibrate upright posture**. Hold still until **Calibrated** appears. Python requires at least 30 reliable frames over an observation interval; short tracking interruptions need not discard all progress. Recalibrate after changing the view, camera position or normal seating position.
+5. Try sustained lateral tilt, moving your upper body forward, lowering your head and reclining. **Python tracking diagnostics** shows the candidate, reason code, upper/full-body tracking, processed frame count and reliability. The backend terminal provides the same state transitions and performance details.
+6. Optionally enable **Enable local debug preview** to see an MJPEG image with a skeleton drawn by Python. The preview is **off by default**. Without it, the dashboard receives labels and derived diagnostics without camera images or body landmark arrays. Mirror preview changes display orientation only.
+7. Click **Stop camera** to release it. A capture started from this panel also stops when the page is hidden or left. A pre-existing headless Python pipeline is only observed and is not stopped merely by leaving this dashboard. Stopping does not silently replace observed vision with generated posture; in demo mode, use **Use simulated vision** explicitly.
 
-The camera replaces the **vision input only**. Lighting, noise, temperature, humidity, seat/motion signals and distance remain simulated. Simulated FSR/PIR presence follows fresh, reliable PC-camera presence: an empty frame, unreliable tracking, missing calibration or a stopped camera does not manufacture an occupied desk. These signals are not measurements from real seat or motion sensors. Distance is not estimated as calibrated centimeters from the webcam. Hardware mode continues to use the Pi/MQTT path documented in [HARDWARE.md](HARDWARE.md).
+In **Demo workspace**, the camera replaces vision only. Environment, ToF distance, seat/motion signals and outputs remain simulated. Simulated presence follows fresh reliable camera presence; this is not an independent physical sensor measurement. In **Real hardware**, Python camera metadata joins actual gateway sensors and missing sensor values remain unavailable. Switching mode stops the previous camera owner and clears its evidence.
 
 ## Labels and limits
 
-MediaPipe provides keypoints, not FocusGuard's posture labels. The classifier applies aspect-ratio-corrected geometry, confidence checks, personal calibration and short temporal stabilization. A front view can fall back to reliable nose and shoulder points when a desk hides the hips. Additional face points help distinguish head pitch and roll; reliable hips/world landmarks provide extra torso evidence when available. Upper-body points require visibility at least 0.6, presence at least 0.5 and combined reliability `sqrt(visibility × presence)` at least 0.6. This permits a visible tracked shoulder near the frame edge while rejecting missing or weak evidence; it never uses confidence from an off-frame hip. MediaPipe detection/presence/tracking thresholds are 0.5 for this browser demo.
+For unattended restarts, set `CALIBRATION_FILE=backend/data/vision-calibration.json`
+before starting the API, calibrate once through the dashboard and leave the camera
+fixed. Python atomically saves numeric baseline geometry after calibration is
+ready. With `VISION_AUTOSTART=true` in hardware mode, the service can restore that
+validated baseline for the selected view. Missing, legacy or wrong-view files
+log a warning and require calibration; the service never learns an arbitrary
+startup posture automatically. Without `CALIBRATION_FILE`, calibration remains
+in memory and no baseline file is written. Recalibrate after changing the person,
+camera, zoom or seating position.
 
-Front-view forward lean is an **estimate relative to the calibrated baseline** using apparent size and head-to-shoulder changes. These features are posture proxies, not absolute forward distance, measured spine curvature or an ergonomic diagnosis. Moving a chair, changing zoom or moving the camera can mimic posture changes. The slouch category includes rounded or collapsed head/neck postures and the reclined, chin-up examples supplied for this demo. One front camera cannot conclusively separate reclining from moving farther away. A side view or additional sensors can improve that distinction. The labels do not infer attention, identify a person, recognize a phone or diagnose health conditions.
+MediaPipe supplies landmarks, not FocusGuard labels. Python applies the existing calibrated geometry and confidence checks, including the upper-body improvements tuned with the supplied screenshots. Front view can use a reliable nose and both shoulders when the desk hides the hips. Additional face points help distinguish head pitch and roll, and reliable torso/world geometry supplies extra evidence when available.
 
-| Label | Interpretation |
+| Label | Meaning |
 |---|---|
-| `GOOD` | Reliable geometry remains close to the calibrated upright baseline. |
+| `GOOD` | Reliable geometry remains near the calibrated upright baseline. |
 | `SLOUCH` | Calibrated head/neck collapse or rounded/reclined, chin-up posture consistent with the demo examples. |
-| `LEAN_FORWARD` | Estimated forward approach relative to baseline, using upper-body size and head/shoulder changes or reliable torso geometry. |
-| `LEAN_LEFT_RIGHT` | Lateral head/shoulder or torso tilt in Front view; left and right are grouped. |
-| `NO_PERSON` | No person detected in the current frame; this is separate from the simulated desk occupancy sensor. |
-| `UNKNOWN` | Calibration is missing/in progress, required head/shoulder evidence is occluded/cropped, multiple people appear, or evidence is unreliable. Cropped hips alone do not block a front upper-body view. |
+| `LEAN_FORWARD` | Estimated approach relative to the baseline from size and head/shoulder changes or reliable torso geometry. |
+| `LEAN_LEFT_RIGHT` | Lateral head/shoulder or torso tilt; left and right are grouped. |
+| `NO_PERSON` | No person detected in a frame; distinct from unavailable camera input. |
+| `UNKNOWN` | Calibration incomplete, required head/shoulders cropped or unreliable, multiple people, or unusable geometry. Cropped hips alone do not block Front upper-body tracking. |
 
-The seven screenshots in `IMG_dataset/` contain one GOOD reference and six posture examples from one person/camera setup. They are tuning and regression examples, **not an independent accuracy benchmark**. Screenshot overlays and cropping can also affect landmark extraction. The [reproducible local workflow](../evaluation/pc_dataset.md) records actual native MediaPipe output and classifier agreement on these samples. An extreme bowed head may need tracking from the neutral posture; cold-start IMAGE inference missed SLOUCH1 in this small set. Passing these examples does not establish general accuracy or guarantee browser GPU behavior. No real-world accuracy or camera FPS benchmark is claimed by the software tests.
+Upper-body points require visibility at least 0.6, presence at least 0.5 and combined reliability `sqrt(visibility × presence)` at least 0.6. MediaPipe detection/presence/tracking thresholds are 0.5. The classifier uses the frame's aspect ratio, a personal neutral baseline and short temporal stabilization. Reliability is not a measured classification accuracy percentage.
 
-To evaluate beyond this small set, compare labels against independently annotated trials from different people, cameras, distances and lighting conditions, and record the actual FPS displayed on each PC. Keep tuning samples separate from evaluation samples. Include occlusion, moving the chair without changing posture, leaving the frame and a second person. The existing [evaluation guide](../evaluation/README.md) describes classification reporting and the distinction between synthetic and measured data.
+Forward lean is relative geometry, not calibrated centimeters, absolute depth or spine curvature. Moving the camera/chair or changing zoom can resemble posture changes. One front camera cannot conclusively distinguish reclining from moving farther away. These labels do not identify a person, infer attention or diagnose health.
 
-## Asset setup and reproducibility
+The seven screenshots in `IMG_dataset/` are tuning/regression examples from one person, not an independent accuracy benchmark. Replay their extracted landmarks through the Python classifier with:
 
-`npm ci` runs `scripts/prepare-vision-assets.mjs`. The same setup runs before `npm run dev` and `npm run build`. It:
+```powershell
+.\.venv\Scripts\python.exe -m evaluation.evaluate_pc_posture
+```
 
-- Copies the SIMD and non-SIMD WASM loader/runtime pairs from the exact locked `@mediapipe/tasks-vision@0.10.32` npm package into `frontend/public/vision/wasm/`.
-- Reuses the verified `raspberry_pi/models/pose_landmarker_lite.task` if available. Otherwise it downloads the [official float16 version-1 lite bundle](https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task) at setup time. Every run checks the expected size **5,777,746 bytes** and SHA256 **`59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a`** before using it.
-- Bundles `src/workers/pose.worker.ts` to a standalone classic worker at `/vision/pose.worker.js`. This is necessary because the pinned runtime's WASM loader uses `importScripts`; the same artifact works during Vite development and production.
-- Writes `/vision/assets.json` with artifact versions and hashes. Generated binaries, model and worker are ignored in Git; clean Docker builds prepare them before creating the production frontend.
+The fixture is `evaluation/fixtures/pc-dataset.landmarks.json`; the default report is `evaluation/results/pc-dataset/report.json`. See [the tuning report](../evaluation/pc_dataset.md) and [evaluation protocol](../evaluation/README.md). The frozen-landmark fixture remains a 7/7 classifier regression. A separate native CPU pipeline probe on the seven screenshots matched 6/7: the extreme SLOUCH1 example remained UNKNOWN because its newly extracted head/shoulder evidence was unreliable/cropped. The accepted posture logic was preserved rather than retuned for that probe. Neither result is a live-webcam or independent-person accuracy benchmark. Passing replay tests does not establish live camera speed or accuracy on new people.
 
-First-time installation needs access to npm and `storage.googleapis.com`. Once installed, runtime inference loads the model, worker and WASM from the same FocusGuard origin, without a CDN dependency. To provision without a model download, place the exact hash-verified `.task` file at `raspberry_pi/models/pose_landmarker_lite.task` before `npm ci`. Run `npm --prefix frontend run prepare:vision` to retry setup. A hash mismatch deliberately fails setup; replace the offending file with the reviewed artifact rather than changing the expected hash.
+## Terminal debugging
 
-Changes to the worker or its classifier imports require restarting `npm run dev` to rebuild the classic worker. React UI changes retain normal Vite hot reload.
+The `focusguard.vision` logger reports startup, requested/actual delegate, camera backend/index, calibration, posture/candidate/reason changes, FPS, inference milliseconds, errors and resource release. INFO output includes periodic reports about every two seconds and rate-limited transitions; DEBUG adds numerical geometry without frames or landmark arrays.
 
-## Privacy and licenses
+```powershell
+$env:FOCUSGUARD_LOG_LEVEL = 'DEBUG'
+.\start.ps1 -Vision
+```
 
-Frames and raw landmarks remain in browser memory; the preview is not recorded. When PC vision is selected, the application sends derived posture/confidence/health metadata to the local FocusGuard API. Stored sessions and exports can therefore contain posture metadata, but not images or recordings. Camera permission can be revoked in browser site settings; browser permission prompts and device availability remain under the user's control.
+Return to `INFO` for normal use. Check the terminal when the panel reports a camera, missing dependency, model, or GPU initialization failure. An unavailable GPU falls back to CPU and reports that actual delegate; a GPU-equipped machine alone is not proof that the MediaPipe build uses it.
 
-Google's [general MediaPipe privacy notice](https://developers.google.com/edge/mediapipe/solutions/tasks#mediapipe_tasks_privacy_notice) permits performance and usage metrics while keeping input data on device. In a [June 10, 2026 clarification](https://github.com/google-ai-edge/mediapipe/issues/6306), a Google maintainer stated that the Web SDK at that time contained no telemetry. This project pins the earlier 0.10.32 Web release, serves its assets locally and does not add analytics. Review privacy behavior and worker compatibility before upgrading the SDK; this is not a blanket privacy claim about future MediaPipe versions.
+## Raspberry Pi 5 deployment
 
-MediaPipe and the BlazePose GHUM model use Apache-2.0. The official [model card](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20BlazePose%20GHUM%203D.pdf) covers the lite/full/heavy model family and its limitations. Distributions include [LICENSE-MEDIAPIPE.txt](../frontend/public/vision/LICENSE-MEDIAPIPE.txt) and [NOTICE.txt](../frontend/public/vision/NOTICE.txt), also served under `/vision/`.
+Raspberry Pi 5 has a VideoCore VII GPU, but MediaPipe delegate availability depends on its package build and graphics stack. CPU is the standard default. Set `VISION_DELEGATE=gpu` or `auto` to attempt GPU initialization with a logged CPU fallback; inspect the reported actual delegate and measure on the target Pi. See [Pi 5 specifications](https://www.raspberrypi.com/products/raspberry-pi-5/) and [MediaPipe's Python Pose Landmarker guide](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/python).
+
+Use the project-supported 64-bit Raspberry Pi OS / Python 3.11 environment and platform dependency pins. USB cameras use `CAMERA_BACKEND=opencv`; CSI cameras use `CAMERA_BACKEND=picamera2` with the OS-provided Picamera2/libcamera stack. The general Python setup supports Raspberry Pi OS 64-bit; package/wheel compatibility still needs the target environment. See [MediaPipe Python setup](https://developers.google.com/edge/mediapipe/solutions/setup_python) and [HARDWARE.md](HARDWARE.md) for installation and GPIO deployment.
+
+For headless direct-backend capture, configure `FOCUSGUARD_MODE=hardware`, `VISION_AUTOSTART=true`, `CAMERA_INDEX=0` and `CAMERA_VIEW=front` before starting the API. Autostart is ignored in demo mode. This avoids requiring an open dashboard to keep camera processing running. Use one camera owner: do not run the standalone Pi gateway camera and direct-backend camera against the same device simultaneously.
+
+## Model and privacy
+
+`python -m backend.vision.model --download` validates/reuses a project model or explicitly downloads the [official version-1 lite pose bundle](https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task). The SHA256 is `59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a`. Existing verified Pi/model files can be reused. `POSE_MODEL` selects another local path, which must match the pinned artifact. A mismatch fails rather than silently substituting a model.
+
+Raw frames and landmarks exist in Python memory for inference; the normal status JSON contains `landmarks: []` and derived geometry/labels only. The explicitly enabled local MJPEG preview transmits images to the dashboard without saving them. Stop or disable preview to end that stream. SQLite, Influx, CSV and optional Bedrock summaries contain derived/aggregate metadata, never image recordings, audio or landmark arrays. No microphone is opened. This project does not add analytics; Google's [MediaPipe Tasks privacy notice](https://developers.google.com/edge/mediapipe/solutions/tasks#mediapipe_tasks_privacy_notice) describes SDK metrics and on-device inputs. Review SDK behavior when upgrading.
+
+MediaPipe and the BlazePose GHUM model are Apache-2.0; see the [official model card](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20BlazePose%20GHUM%203D.pdf) for the model family and limitations.
 
 ## Troubleshooting
 
 | Symptom | Action |
 |---|---|
-| Camera permission denied | Allow camera access for the localhost site in browser settings, then click Start again. |
-| No camera found or device busy | Connect a webcam and close another application using it. Check Windows camera privacy access for the browser. |
-| Camera unavailable over a LAN URL | Use `http://localhost` / `http://127.0.0.1` on the camera PC, or serve HTTPS. Browsers require a secure context for camera access; plain LAN HTTP is insufficient. |
-| Model or WASM load error | Run `npm --prefix frontend run prepare:vision`, restart development, or run `./start.ps1 -Build`. Check `/vision/assets.json` is available. |
-| UNKNOWN or calibration never completes | In Front view, frame the head and both shoulders; hips may stay behind the desk. Click Calibrate upright posture, improve lighting and hold still until Calibrated. Check the local tracking reason and sample counter. A Side view benefits from a visible shoulder and hip. |
-| Camera label works but dashboard shows UNKNOWN | Check the API connection and the confidence threshold in Settings. The displayed landmark reliability must meet that threshold; it is not a posture accuracy percentage. |
-| Labels seem wrong after moving the camera | Choose Front/Side appropriately and recalibrate upright posture. |
-| Vision becomes unavailable after switching tabs | Return to Overview and click Start PC camera. Capture intentionally stops when hidden. |
-
+| Camera cannot open / device busy | Check backend camera index, connect the camera to the backend machine, close other camera applications, and check OS camera privacy permissions for Python/desktop apps. |
+| Browser is on another PC | Controls still operate the backend machine's camera. There is no browser webcam capture. |
+| Missing `mediapipe`, `cv2` or model | Install `backend/requirements-vision.txt`, run the explicit model setup command, then restart camera processing. The simulator remains usable without these extras. |
+| GPU initialization fails | Read the fallback reason in the terminal. Use CPU for compatibility and benchmark the target Pi separately. |
+| UNKNOWN / calibration never completes | Keep the head and both shoulders visible in Front view, improve lighting and hold still while calibrating. Check reason/candidate and reliable-frame progress. |
+| Panel detects a label but desk posture is UNKNOWN | Check engine confidence threshold, source/mode, staleness and API connection. Reliability must meet configured settings. |
+| Preview is blank | Start the Python camera, enable the local debug preview, and check the terminal. Preview is unavailable by default and does not control inference. |
+| Camera stopped after changing tabs | A camera started by this panel intentionally stops when hidden. Return and start it again, or use hardware-only headless autostart for continuous deployment. |
