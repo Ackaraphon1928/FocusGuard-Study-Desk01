@@ -1,4 +1,5 @@
 export type DataMode = 'demo' | 'hardware';
+export type VisionSource = 'simulated' | 'pc_camera' | 'gateway';
 export type Posture = 'GOOD' | 'SLOUCH' | 'LEAN_FORWARD' | 'LEAN_LEFT_RIGHT' | 'NO_PERSON' | 'UNKNOWN';
 export type Scenario = 'normal' | 'slouch' | 'too_close' | 'dark' | 'noisy' | 'hot' | 'away' | 'camera_offline' | 'occluded' | 'network_offline';
 export type ControlAction = 'start' | 'pause' | 'resume' | 'end' | 'break' | 'finish_break';
@@ -61,6 +62,7 @@ export interface StudySession {
   ended_at?: string;
   state: 'ACTIVE' | 'PAUSED' | 'BREAK' | 'ENDED';
   mode: DataMode;
+  vision_source?: VisionSource | 'unknown';
   elapsed_seconds: number;
   sitting_seconds: number;
   continuous_sitting_seconds: number;
@@ -103,6 +105,7 @@ export interface DeskEvent {
   message: string;
   timestamp: string;
   mode: DataMode | 'unknown';
+  vision_source?: VisionSource | 'unknown';
   session_id?: string;
   source?: string;
 }
@@ -114,6 +117,7 @@ export interface Device {
   last_seen: string | null;
   topic: string;
   simulated: boolean;
+  source?: VisionSource;
 }
 
 export interface Rule {
@@ -126,6 +130,8 @@ export interface Rule {
 
 export interface DeskState {
   mode: DataMode;
+  vision_source: VisionSource;
+  vision_last_seen: string | null;
   now: string;
   running: boolean;
   scenario: Scenario;
@@ -171,6 +177,7 @@ export interface DeskState {
 export interface HistoryPoint {
   timestamp: string;
   mode: DataMode;
+  vision_source?: VisionSource;
   score: number | null;
   distance_cm: number | null;
   seat_pressure: number | null;
@@ -196,6 +203,7 @@ export interface HistoryPoint {
 
 export interface Metrics {
   mode: DataMode;
+  vision_source?: VisionSource;
   telemetry_messages: number;
   invalid_messages: number;
   observed_fps: number | null;

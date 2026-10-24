@@ -173,12 +173,15 @@ function PreferencesForm({ state }: { state: DeskState }) {
         <div className="space-y-6">
           <SettingsSection title="Keep it close. Keep it private." description="Privacy is the default behavior of your desk.">
             <div className="mb-5 flex items-center justify-center gap-3 rounded-xl bg-stone-50 p-4 text-xs text-stone-600"><Camera className="size-4 text-emerald-700" /><span>Local camera</span><ArrowRight className="size-4 text-stone-400" /><span>Pose metadata</span></div>
-            <div className="mb-5 flex items-start justify-between gap-3"><div><p className="text-sm font-semibold text-stone-800">Local camera processing</p><p className="mt-1 text-xs leading-relaxed text-stone-500">Raw frames stay on the Raspberry Pi. No video upload or audio recording.</p></div><Badge tone="good">Always on</Badge></div>
+            <div className="mb-5 flex items-start justify-between gap-3"><div><p className="text-sm font-semibold text-stone-800">Local camera processing</p><p className="mt-1 text-xs leading-relaxed text-stone-500">Raw frames stay in the capturing PC browser or Raspberry Pi. No video upload or audio recording.</p></div><Badge tone="good">Local only</Badge></div>
             <SettingToggle name="cloud_ai_consent" title="Optional AI session summaries" description="Allow aggregate session statistics to be sent to AWS Bedrock. Off by default. Requires server credentials." register={register} />
             <p className="mt-5 text-xs leading-relaxed text-stone-400">Without cloud AI, your session statistics and local rule-based summaries remain available.</p>
           </SettingsSection>
           <DeskControls key={state.mode} actuators={state.actuators} mode={state.mode} />
-          <SettingsSection title="Camera calibration" description="Sit upright at your usual distance, with your shoulders and hips visible. The Pi calibration command records your neutral geometry locally.">
+          <SettingsSection title="Camera calibration" description="Sit upright at your usual distance, with your head, shoulders and hips visible.">
+            <p className="mb-4 text-xs leading-relaxed text-stone-500">For the PC demo, open the camera lab, choose Front or Side, start the camera and select Calibrate upright posture. The neutral baseline stays in browser memory.</p>
+            <a href="#/overview" className="mb-5 inline-flex text-xs font-semibold text-pine underline underline-offset-4">Open PC camera lab</a>
+            <p className="mb-2 text-xs text-stone-500">For the Raspberry Pi hardware gateway:</p>
             <code className="block overflow-x-auto rounded-xl bg-stone-900 p-4 text-xs leading-relaxed text-stone-100">python -m raspberry_pi.gateway --calibrate --preview</code>
             <p className="mt-4 text-xs leading-relaxed text-stone-400">Moving the camera changes pose geometry. Recalibrate after changing its position.</p>
           </SettingsSection>

@@ -26,10 +26,13 @@ if ($LASTEXITCODE -ne 0) { throw 'Dependencies are missing. Run .\start.ps1 -Ins
 
 $frontendPath = Join-Path $PSScriptRoot 'frontend'
 $builtIndex = Join-Path $frontendPath 'dist\index.html'
-$needsBuild = $Build -or $Install -or -not (Test-Path -LiteralPath $builtIndex)
+$builtPoseWorker = Join-Path $frontendPath 'dist\vision\pose.worker.js'
+$builtPoseModel = Join-Path $frontendPath 'dist\vision\pose_landmarker_lite.task'
+$needsBuild = $Build -or $Install -or -not (Test-Path -LiteralPath $builtIndex) -or -not (Test-Path -LiteralPath $builtPoseWorker) -or -not (Test-Path -LiteralPath $builtPoseModel)
 if (-not $needsBuild) {
     $builtAt = (Get-Item -LiteralPath $builtIndex).LastWriteTimeUtc
     $sourceFiles = @(Get-ChildItem -LiteralPath (Join-Path $frontendPath 'src') -Recurse -File)
+    $sourceFiles += Get-ChildItem -LiteralPath (Join-Path $frontendPath 'scripts') -Recurse -File
     $sourceFiles += Get-ChildItem -LiteralPath $frontendPath -File | Where-Object {
         $_.Name -eq 'index.html' -or $_.Extension -in '.json', '.ts', '.js'
     }

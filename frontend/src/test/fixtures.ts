@@ -3,6 +3,8 @@ import type { DeskState, HistoryPoint, Metrics } from '../lib/types';
 // Deterministic synthetic fixtures for React interaction tests only.
 export const deskFixture = {
   "mode": "demo",
+  "vision_source": "simulated",
+  "vision_last_seen": "1970-01-01T00:16:43Z",
   "now": "1970-01-01T00:16:43Z",
   "running": true,
   "scenario": "normal",

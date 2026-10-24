@@ -43,4 +43,25 @@ describe('demo lab workflow', () => {
     expect(await screen.findByRole('button', { name: 'Fast rules enabled' })).toBeInTheDocument();
     expect(screen.getByText(/These settings persist until changed/)).toBeInTheDocument();
   });
+
+  it('keeps actual camera labels while allowing simulated environment scenarios', async () => {
+    const state = makeDesk({ vision_source: 'pc_camera' });
+    const fetchMock = vi.fn(async (url: string) => Response.json(url === '/api/demo' ? { ...state, scenario: 'dark' } : state));
+    vi.stubGlobal('fetch', fetchMock);
+    renderWorkspace(<DemoLab open onClose={() => {}} />);
+    expect(await screen.findByText(/Live camera posture and occupancy are not overridden/)).toBeInTheDocument();
+    for (const title of ['A little slouch', 'Leaning too close', 'Step away', 'Camera disconnected', 'An uncertain pose']) {
+      const button = screen.getByRole('button', { name: new RegExp(title) });
+      expect(button).toBeDisabled();
+      await userEvent.click(button);
+    }
+    for (const title of ['In balance', 'Lights down', 'A noisy room', 'Feeling the heat', 'Sensor network offline']) {
+      expect(screen.getByRole('button', { name: new RegExp(title) })).toBeEnabled();
+    }
+    expect(fetchMock.mock.calls.some(([url]) => String(url) === '/api/demo')).toBe(false);
+    expect(screen.getByText(/FPS come from your PC camera/)).toBeInTheDocument();
+    expect(screen.queryByText(/confidence, and FPS are simulated/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Lights down/ }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/demo', expect.objectContaining({ body: JSON.stringify({ scenario: 'dark' }) })));
+  });
 });

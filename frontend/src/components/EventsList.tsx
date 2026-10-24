@@ -11,6 +11,6 @@ export function EventsList({ events, limit = 5 }: {events: DeskEvent[]; limit?: 
   })}</ul>;
 }
 
-export function LiveLabel({ demo, offline = false }: {demo: boolean; offline?: boolean}) {
-  return <span className="inline-flex items-center gap-2 text-[10px] font-medium tracking-wide text-pine"><Activity className="size-3.5" />{offline ? 'RECONNECTING' : demo ? 'LIVE SIMULATION' : 'LIVE MONITORING'}</span>;
+export function LiveLabel({ demo, pcCamera = false, offline = false }: {demo: boolean; pcCamera?: boolean; offline?: boolean}) {
+  return <span className="inline-flex items-center gap-2 text-[10px] font-medium tracking-wide text-pine"><Activity className="size-3.5" />{offline ? 'RECONNECTING' : pcCamera ? 'PC VISION · DEMO SENSORS' : demo ? 'LIVE SIMULATION' : 'LIVE MONITORING'}</span>;
 }

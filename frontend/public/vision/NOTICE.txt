@@ -1,0 +1,35 @@
+FocusGuard locally hosted MediaPipe assets
+
+MediaPipe Tasks Vision 0.10.32
+Copyright The MediaPipe Authors / Google LLC.
+Source: https://github.com/google-ai-edge/mediapipe/tree/v0.10.32
+Package: https://www.npmjs.com/package/@mediapipe/tasks-vision/v/0.10.32
+License: Apache License, Version 2.0 (see LICENSE-MEDIAPIPE.txt).
+The JavaScript/WASM files under wasm/ are copied without modification from the
+exact npm package recorded by package-lock.json. pose.worker.js bundles that SDK
+with FocusGuard's own worker integration at build time.
+
+BlazePose GHUM pose landmarker lite, float16, version 1
+Authors: Valentin Bazarevsky, Ivan Grishchenko, Eduard Gabriel Bazavan, Google.
+Source: https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task
+SHA256: 59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a
+Model card (Lite, Full and Heavy; Apache License, Version 2.0):
+https://storage.googleapis.com/mediapipe-assets/Model%20Card%20BlazePose%20GHUM%203D.pdf
+The .task model bundle is used without modification. The downloaded model and
+WASM binaries are generated setup assets and are excluded from source control.
+
+References:
+BlazePose: On-device Real-time Body Pose tracking, CVPR Workshop on Computer
+Vision for Augmented and Virtual Reality, 2020.
+GHUM & GHUML: Generative 3D Human Shape and Articulated Pose Models, CVPR, 2020.
+
+Privacy and version maintenance:
+https://developers.google.com/edge/mediapipe/solutions/tasks#mediapipe_tasks_privacy_notice
+https://github.com/google-ai-edge/mediapipe/issues/6306
+The application processes video frames in a local browser worker and sends
+derived posture metadata only to the local FocusGuard API when connected.
+MediaPipe's general privacy notice permits Google performance/usage metrics.
+Google's June 10, 2026 clarification states that the Web SDK at that time did not
+include telemetry. The pinned 0.10.32 release predates that clarification; do not
+assume future SDK releases retain the same behavior. Reassess privacy and runtime
+compatibility before updating the pinned version.

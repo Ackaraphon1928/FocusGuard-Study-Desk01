@@ -13,7 +13,7 @@ from typing import Any, Literal
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from .engine import FocusGuardEngine
 from .integrations import InfluxWriter, MqttBridge, SummaryService
@@ -37,6 +37,23 @@ class DemoRequest(StrictModel):
 
 class ModeRequest(StrictModel):
     mode: Literal["demo", "hardware"]
+
+
+class VisionSourceRequest(StrictModel):
+    source: Literal["simulated", "pc_camera"]
+
+
+class PcVisionRequest(StrictModel):
+    """The entire browser/server vision boundary; media is never accepted."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    person_detected: bool
+    posture: Literal["GOOD", "SLOUCH", "LEAN_FORWARD", "LEAN_LEFT_RIGHT", "NO_PERSON", "UNKNOWN"]
+    confidence: float = Field(ge=0, le=1, allow_inf_nan=False)
+    fps: float = Field(ge=0, le=240, allow_inf_nan=False)
+    vision_available: bool
+    inference_ms: float = Field(default=0, ge=0, le=60000, allow_inf_nan=False)
+    ambiguous_people: bool = False
 
 
 class TelemetryRequest(StrictModel):
@@ -215,6 +232,27 @@ def create_app(db_path=None, mode=None, background=True, frontend_dir=None):
     @application.post("/api/demo")
     async def demo(data: DemoRequest):
         return runtime().engine.set_scenario(data.scenario, time.time())
+
+    @application.post("/api/demo/vision-source")
+    async def vision_source(data: VisionSourceRequest):
+        if runtime().engine.mode != "demo":
+            raise HTTPException(409, "PC camera demo requires demo mode")
+        result = runtime().engine.set_vision_source(data.source, time.time())
+        await runtime().process_events()
+        return result
+
+    @application.post("/api/demo/vision")
+    async def pc_vision(data: PcVisionRequest):
+        engine = runtime().engine
+        if engine.mode != "demo" or engine.vision_source != "pc_camera":
+            raise HTTPException(409, "Select PC camera vision in demo mode before sending pose metadata")
+        now = time.time()
+        result = engine.ingest_pc_vision(data.model_dump(), now)
+        point = engine.step(now)
+        if point:
+            runtime().influx.enqueue(point)
+        await runtime().process_events()
+        return result
 
     @application.post("/api/mode")
     async def mode_change(data: ModeRequest):

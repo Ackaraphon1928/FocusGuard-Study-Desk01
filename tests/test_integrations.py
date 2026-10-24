@@ -55,6 +55,20 @@ class MqttBoundaryTests(unittest.TestCase):
 
 
 class InfluxContractTests(unittest.TestCase):
+    def test_conditions_and_events_include_only_known_vision_source_strings(self):
+        point = {"timestamp": "2026-10-24T00:00:00Z", "mode": "demo", "posture": "GOOD"}
+        event = {**point, "measurement": "desk_events", "event_type": "VISION_SOURCE_CHANGED", "message": "Camera selected."}
+        for record in [point, event]:
+            for source in ["simulated", "pc_camera", "gateway", "unknown"]:
+                with self.subTest(measurement=record.get("measurement"), source=source):
+                    line = InfluxWriter.line({**record, "vision_source": source, "frame": "private"})
+                    self.assertIn(f'vision_source="{source}"', line)
+                    self.assertNotIn("frame=", line)
+                    self.assertNotIn("private", line)
+            line = InfluxWriter.line({**record, "vision_source": 'camera"\ninjected=1'})
+            self.assertNotIn("vision_source=", line)
+            self.assertNotIn("injected", line)
+
     def test_conditions_have_numeric_and_boolean_fields_without_unknown_or_nan_values(self):
         point = {
             "timestamp": "2026-10-24T00:00:00Z", "mode": "hardware",

@@ -11,6 +11,9 @@ flowchart LR
     V -->|Pose / confidence / FPS only| M
     M --> F[FastAPI\nFreshness + sensor fusion + timed rules]
     S[Live demo simulator] --> F
+    PC[PC webcam] --> W[Browser classic Web Worker\nMediaPipe Tasks + calibrated geometry]
+    W -->|Local video / skeleton preview| D
+    W -->|Demo-only HTTP\nLabels / confidence / FPS / health| F
     F --> Q[SQLite\nSettings / sessions / events / timestamped samples]
     F -->|Expiring commands| M
     M --> G[Pi GPIO adapter\nPWM lamp / fan / bounded buzzer]
@@ -33,6 +36,7 @@ SQLite supplies durable local history when no additional services are running. T
 ## Boundaries and state
 
 - **Demo versus hardware:** each observation, session, and event carries a mode. Database filters apply before record limits. Demo mode never publishes physical actuator commands. Switching modes ends the current session and clears previous sensor state.
+- **PC camera demo:** the selected vision source is `simulated`, `pc_camera` or hardware `gateway`. PC frames and landmarks stay in the browser. A single in-flight frame bounds worker load; only allowlisted metadata is sent to the API. The PC source replaces simulated vision while environment/ToF stay simulated; simulated seat/motion presence follows reliable camera presence. Missing calibration, uncertainty and stale vision do not count as healthy posture. Stopping, hiding the tab or navigating away releases capture and marks PC vision unavailable; simulation resumes only by explicit selection. Source changes split sessions, and history, sessions, events and CSV exports preserve source provenance.
 - **Occupancy:** two independent presence signals establish occupancy. Fresh vision/seat/motion metadata is fused; stale readings become unknown. Temporary absence pauses a session after its grace interval, and prolonged inactivity ends it.
 - **Session timing:** active desk time, continuous sitting time, screen time, and break duration are distinct. A completed movement break resets continuous sitting; an early return does not earn a full movement break. Manual pause does not reset continuous sitting.
 - **Warnings:** abnormal conditions must persist for their configured duration. Reliable vision is required for posture alerts; distance and forward lean support fused too-close warnings. Cooldowns and short GPIO buzzer pulses prevent continuous beeping.
@@ -44,6 +48,6 @@ The API is described in [backend/API.md](../backend/API.md). Calibration and wir
 
 ## Scope of the running prototype
 
-The default browser view demonstrates the control loop using live synthetic readings, including failures. The Pi and ESP32 programs are independent runnable integrations; they require the named hardware, model, drivers, and credentials. Docker Compose provisions the local services. A successful simulation or software test does not establish physical sensing performance or complete the course's real-world evaluation.
+The default browser view demonstrates the control loop using live synthetic readings, including failures. The optional [PC camera lab](PC_CAMERA.md) uses real webcam pose inference with simulated remaining sensors. The Pi and ESP32 programs are independent runnable integrations; they require the named hardware, model, drivers, and credentials. Docker Compose provisions the local services. A successful simulation or software test does not establish physical sensing performance or complete the course's real-world evaluation.
 
 Multi-desk tenancy, identity/card hardware, notifications, OTA updates, a trained posture classifier, and cloud synchronization are future extensions listed by the source document. The prototype has one study workspace and configurable personal thresholds.

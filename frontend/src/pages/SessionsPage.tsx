@@ -23,6 +23,13 @@ function sourceLabel(source: string | null | undefined) {
   return source === 'aws_bedrock' ? 'AWS Bedrock · aggregate statistics only' : source === 'local' ? 'Generated locally · aggregate statistics' : source ? humanize(source) : 'Summary has not been generated';
 }
 
+function visionLabel(session: StudySession) {
+  return session.vision_source === 'pc_camera' ? 'PC camera · simulated environment'
+    : session.vision_source === 'simulated' ? 'Simulated vision'
+      : session.vision_source === 'gateway' ? 'Pi camera'
+        : 'Vision source not recorded';
+}
+
 export function SessionsPage() {
   const desk = useDesk();
   return desk.data ? <SessionJournal key={desk.data.mode} desk={desk.data} /> : <ErrorNotice error={desk.error} />;
@@ -69,7 +76,7 @@ function SessionJournal({ desk }: { desk: DeskState }) {
       {sessionsQuery.isPending ? <p role="status" className="p-10 text-center text-sm text-stone-500">Loading your sessions…</p> : sessions.length ? <div className="overflow-x-auto"><table className="w-full min-w-[710px] text-left text-sm">
         <thead className="bg-stone-50/60 text-xs uppercase tracking-wider text-stone-500"><tr>{['Session', 'Time at desk', 'Conditions', 'Upright', 'Breaks', ''].map((heading) => <th key={heading} scope="col" className="px-6 py-4 font-medium">{heading || <span className="sr-only">Details</span>}</th>)}</tr></thead>
         <tbody className="divide-y divide-stone-100">{sessions.map((session) => <tr key={session.id} className="transition hover:bg-stone-50/60">
-          <td className="px-6 py-5"><p className="font-medium text-stone-800">{formatDate(session.started_at)}</p><p className="mt-1 text-xs text-stone-500">{formatTime(session.started_at)} – {session.ended_at ? formatTime(session.ended_at) : humanize(session.state)}</p></td>
+          <td className="px-6 py-5"><p className="font-medium text-stone-800">{formatDate(session.started_at)}</p><p className="mt-1 text-xs text-stone-500">{formatTime(session.started_at)} – {session.ended_at ? formatTime(session.ended_at) : humanize(session.state)}</p><p className="mt-1 text-xs text-stone-500">{visionLabel(session)}</p></td>
           <td className="px-6 py-5 tabular-nums text-stone-600">{shortDuration(session.elapsed_seconds ?? session.duration_seconds ?? 0)}</td>
           <td className="px-6 py-5"><Badge tone={session.average_score != null && session.average_score < 60 ? 'warning' : session.average_score == null ? 'muted' : 'good'}>{session.average_score == null ? 'Unobserved' : `${formatNumber(session.average_score)} / 100`}</Badge></td>
           <td className="px-6 py-5 tabular-nums text-stone-600">{session.good_posture_percent == null ? '—' : `${formatNumber(session.good_posture_percent)}%`}</td>
@@ -77,12 +84,12 @@ function SessionJournal({ desk }: { desk: DeskState }) {
           <td className="px-6 py-5"><button type="button" onClick={() => { setSelectedId(session.id); setGenerated(null); }} className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-2 font-medium text-[#658146] hover:bg-[#eff3e9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6c884c]">View session<ArrowUpRight size={16} /></button></td>
         </tr>)}</tbody>
       </table></div> : <EmptyState title="Your first chapter is ahead." description="End a session from the overview to save its conditions, events, and summary here." />}
-      <p className="border-t border-stone-100 px-6 py-4 text-xs leading-relaxed text-stone-500">{mode === 'demo' ? 'Simulator sessions are kept separate from hardware sessions.' : 'Sessions contain derived sensor metadata. Camera frames and audio are never saved.'}</p>
+      <p className="border-t border-stone-100 px-6 py-4 text-xs leading-relaxed text-stone-500">{mode === 'demo' ? 'Demo sessions record their vision source. Switching between PC camera and simulated vision starts a separate session.' : 'Sessions contain derived sensor metadata. Camera frames and audio are never saved.'}</p>
     </Card>
     <div className="flex gap-3 rounded-2xl bg-[#f0f3e9] p-5 text-sm leading-relaxed text-stone-600"><Sparkles className="mt-0.5 shrink-0 text-[#7d9662]" size={20} /><p>Open a session for a local reflection. Enable optional AWS Bedrock summaries in privacy settings to share aggregate statistics with cloud AI.</p></div>
     <Modal open={!!selected} onClose={() => setSelectedId(null)} title={selected ? `${formatDate(selected.started_at)} · ${formatTime(selected.started_at)}` : 'Session details'} description="Your session journal">
       {selected && <div className="space-y-6">
-        <div className="flex flex-wrap gap-2"><Badge tone="muted">{selected.mode === 'demo' ? 'Demo session' : 'Hardware session'}</Badge><Badge tone={selected.state === 'ACTIVE' ? 'good' : 'muted'}>{selected.ended_at ? 'Completed' : humanize(selected.state)}</Badge></div>
+        <div className="flex flex-wrap gap-2"><Badge tone="muted">{selected.mode === 'demo' ? 'Demo session' : 'Hardware session'}</Badge><Badge tone="muted">{visionLabel(selected)}</Badge><Badge tone={selected.state === 'ACTIVE' ? 'good' : 'muted'}>{selected.ended_at ? 'Completed' : humanize(selected.state)}</Badge></div>
         <div className="grid gap-3 sm:grid-cols-3">
           <StatCard label="Time at desk" value={shortDuration(selected.elapsed_seconds ?? selected.duration_seconds ?? 0)} caption="Active seated time" icon={Clock3} />
           <StatCard label="Average score" value={formatNumber(selected.average_score)} caption="Out of 100 · observed conditions" icon={Leaf} />
@@ -102,7 +109,7 @@ function SessionJournal({ desk }: { desk: DeskState }) {
           {generatedForSelection?.note && <p className="mt-3 text-xs leading-relaxed text-stone-500">{generatedForSelection.note}</p>}
           {!currentSummary && <p className="mt-3 text-xs leading-relaxed text-stone-500">{desk.settings.cloud_ai_consent ? 'Cloud AI is enabled. A local fallback remains available if Bedrock is unavailable.' : 'Cloud sharing is off. Your reflection is generated locally.'}</p>}
         </section>
-        <p className="text-xs leading-relaxed text-stone-500">{selected.mode === 'demo' ? 'This session uses simulated sensor readings.' : 'Only derived sensor data is saved. No camera or audio recording.'}</p>
+        <p className="text-xs leading-relaxed text-stone-500">{selected.vision_source === 'pc_camera' ? 'Posture and FPS come from the PC camera. Environment, distance, and presence sensor signals are simulated. Frames and body landmarks are never saved.' : selected.mode === 'demo' ? 'This demo session uses simulated sensor readings. Older sessions may not have a recorded vision source.' : 'Only derived sensor data is saved. No camera or audio recording.'}</p>
       </div>}
     </Modal>
   </div>;

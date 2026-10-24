@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DeskState } from '../lib/types';
@@ -62,5 +62,32 @@ describe('devices and network', () => {
     expect(screen.getByText('75% · Manual')).toBeInTheDocument();
     expect(screen.getByText('20%')).toBeInTheDocument();
     expect(screen.getByText(/This report is older than the eight-second command expiry/)).toBeInTheDocument();
+  });
+
+  it('shows PC camera metadata over local HTTP while desk nodes remain simulated', async () => {
+    const state = makeDesk({ vision_source: 'pc_camera' });
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(state)));
+    mountPage();
+    const heading = await screen.findByRole('heading', { name: 'Local vision pipeline' });
+    const vision = within(heading.parentElement!.parentElement!.parentElement!);
+    expect(vision.getByText('PC webcam · MediaPipe in browser')).toBeInTheDocument();
+    expect(vision.getByText('PC camera online')).toBeInTheDocument();
+    expect(vision.getByText('HTTP · local posture metadata')).toBeInTheDocument();
+    expect(vision.getByText('/api/demo/vision')).toBeInTheDocument();
+    expect(vision.queryByText('Internal simulator')).not.toBeInTheDocument();
+    expect(vision.queryByText('Simulated')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Internal simulator')).toHaveLength(3);
+    expect(screen.getByText(/PC webcam video and landmarks stay in your browser/)).toBeInTheDocument();
+  });
+
+  it('keeps an unavailable Raspberry Pi pipeline distinct from the PC webcam demo', async () => {
+    const state = { ...stateFixture(), mode: 'hardware' as const, vision_source: 'gateway' as const };
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json(state)));
+    mountPage();
+    expect(await screen.findByText('Raspberry Pi · OpenCV + MediaPipe')).toBeInTheDocument();
+    expect(screen.queryByText('PC webcam · MediaPipe in browser')).not.toBeInTheDocument();
+    expect(screen.queryByText(/PC camera online|PC camera unavailable/)).not.toBeInTheDocument();
+    expect(screen.getAllByText('MQTT · local network')).toHaveLength(4);
+    expect(screen.getAllByText('No packets yet')).toHaveLength(4);
   });
 });

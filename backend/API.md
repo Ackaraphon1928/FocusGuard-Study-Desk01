@@ -37,6 +37,8 @@ a trusted LAN with an authenticated reverse proxy. Broker credentials stay serve
 | POST | `/api/control` | `{ "action": "start" \| "pause" \| "resume" \| "end" \| "break" \| "finish_break" }` |
 | POST | `/api/actuators` | Partial `{ "lamp_mode": "auto" \| "manual", "lamp_percent": 0..100, "fan_mode": "auto" \| "manual", "fan": true }`; specify manual mode for explicit levels |
 | POST | `/api/demo` | `{ "scenario": "normal" \| "slouch" \| "too_close" \| "dark" \| "noisy" \| "hot" \| "away" \| "camera_offline" \| "occluded" \| "network_offline" }` |
+| POST | `/api/demo/vision-source` | `{ "source": "simulated" \| "pc_camera" }`; demo only, returns current state |
+| POST | `/api/demo/vision` | Derived PC camera metadata described below; demo and PC source only |
 | POST | `/api/mode` | `{ "mode": "demo" \| "hardware" }`; ends current session and clears source readings |
 | POST | `/api/telemetry` | `{ "topic": "focusguard/...", "payload": { ...derived metadata... } }`; hardware mode only |
 | POST | `/api/sessions/{id}/summary` | `{session_id,summary,summary_source,source,cloud_sent,aggregates,note}`; local fallback unless consent and Bedrock configured |
@@ -48,7 +50,7 @@ a trusted LAN with an authenticated reverse proxy. Broker credentials stay serve
 
 History rows contain `timestamp, score, distance_cm, seat_pressure, seat_occupied,
 motion, lux, noise_level, temperature_c, humidity_percent, pressure_hpa, posture,
-person_detected, vision_available, mode, occupied, fps, vision_confidence,
+person_detected, vision_available, mode, vision_source, occupied, fps, vision_confidence,
 lamp_percent, fan, buzzer, session_active, session_seconds`.
 Timestamps are ISO 8601 UTC, not the browser's display timezone. History is sampled
 at most once per second and retained locally for 30 days. Events and sessions stay
@@ -58,12 +60,61 @@ History, sessions, events and CSV export accept an optional `mode=demo|hardware`
 query to filter at the database boundary. Every new event carries its source mode;
 legacy events with no source label are returned as `mode:unknown` and are excluded
 from mode-filtered queries. `/api/state` includes only current-mode events.
+New sessions and events also contain `vision_source`. Legacy records may omit it;
+do not interpret an absent source as a verified PC-camera observation.
+
+## PC camera demo input
+
+The browser runs MediaPipe locally, then selects `pc_camera` only after its model
+is ready. `/api/demo/vision-source` ends any active session when the source changes,
+clears old vision evidence and returns the state. Switching to `simulated` is
+explicit. Hardware mode rejects both PC-demo routes with HTTP 409.
+
+`POST /api/demo/vision` requires `pc_camera` to be selected; otherwise it returns
+409. Its complete allowlist is:
+
+```json
+{
+  "person_detected": true,
+  "posture": "GOOD",
+  "confidence": 0.92,
+  "fps": 14.7,
+  "vision_available": true,
+  "inference_ms": 22.5,
+  "ambiguous_people": false
+}
+```
+
+The first five fields are required. `inference_ms` and `ambiguous_people` are
+optional. Posture is `GOOD`, `SLOUCH`, `LEAN_FORWARD`, `LEAN_LEFT_RIGHT`,
+`NO_PERSON` or `UNKNOWN`. Confidence is 0–1, FPS 0–240, inference time 0–60000 ms;
+booleans are strict. Images, frames, keypoints, landmarks, arbitrary geometry and
+unknown fields return 422. The response contains `accepted`, `topic` and server
+receipt `timestamp`; the internal vision topic does not mean PC observations are
+published over MQTT.
+
+The simulator continues environment/ToF inputs while leaving camera pose and FPS
+untouched. Simulated FSR/PIR presence follows fresh reliable camera presence;
+these are demo signals, not independent physical sensor evidence. Missing
+calibration/unknown posture carries zero usable confidence. Stopped or expired
+camera input clears posture to `UNKNOWN` and FPS to null, with no fake-vision
+fallback. Freshness uses `sensor_stale_seconds` (default 15 seconds). The browser
+also sends unavailable metadata on Stop, navigation or tab hiding. Explicit
+available `NO_PERSON` remains distinct from camera unavailability.
+
+With PC vision selected, `/api/demo` accepts `normal`, `dark`, `noisy`, `hot`,
+and `network_offline`. Camera/posture/away scenarios are rejected with 422 so
+synthetic scenarios cannot overwrite the real camera. Source changes separate
+session aggregates; history, sessions, events and CSV retain `vision_source`.
+See [PC_CAMERA.md](../docs/PC_CAMERA.md) for calibration, labels and limitations.
 
 ## State shape
 
 ```json
 {
   "mode": "demo",
+  "vision_source": "simulated",
+  "vision_last_seen": "2026-10-24T01:00:00Z",
   "now": "2026-10-24T01:00:00Z",
   "running": true,
   "scenario": "normal",
@@ -98,6 +149,10 @@ from mode-filtered queries. `/api/state` includes only current-mode events.
 `average_temperature`, `slouch_events`, `too_close_events`, `summary`,
 `summary_source`, plus weighted integrals used for accurate session aggregation.
 Active snapshots also expose break and eye-break countdowns.
+`vision_source` is `simulated`, `pc_camera` or `gateway`; `vision_last_seen` is
+the latest vision receipt timestamp or null. Vision device entries also expose
+`source`, and their `simulated` flag is false for a PC camera. Metrics report the
+current `vision_source` and measured camera FPS separately from synthetic inputs.
 
 Missing or stale numeric values are **null**, never fabricated zeros. Missing
 posture is `UNKNOWN`. Low pose confidence does not count as healthy posture.
@@ -211,11 +266,11 @@ SQLite records every local sampled point. Optional InfluxDB v2 writes use
 `POST /api/v2/write`, measurement `desk_conditions`, tag `mode=demo|hardware`, and
 numeric fields `score,distance_cm,lux,noise_level,temperature_c,humidity_percent,
 pressure_hpa,seat_pressure,fps,vision_confidence,lamp_percent,session_seconds`,
-string field `posture`, and boolean fields `occupied,good_posture,seat_occupied,
+string fields `posture,vision_source`, and boolean fields `occupied,good_posture,seat_occupied,
 motion,person_detected,vision_available,fan,buzzer,session_active` with millisecond
 precision. Null measurements are omitted rather than written as false or zero.
 New local events also write measurement `desk_events`, tags `mode,event_type,
-severity` and string fields `message,session_id` (session ID when available).
+severity` and string fields `message,session_id,vision_source` (session ID when available).
 Event strings and tags are escaped; an SQLite row cursor forwards each newly
 recorded event once per running process. MQTT's physical event bridge forwards
 hardware events only, so changing from demo never replays simulator warnings to

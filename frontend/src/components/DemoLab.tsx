@@ -19,6 +19,7 @@ export const demoScenarios = [
   { id: 'occluded', title: 'An uncertain pose', description: 'Low-confidence vision case', icon: ScanEye },
   { id: 'network_offline', title: 'Sensor network offline', description: 'Stale readings become unknown', icon: WifiOff },
 ] satisfies {id: Scenario; title: string; description: string; icon: typeof Check}[];
+const pcCameraScenarios = new Set<Scenario>(['normal', 'dark', 'noisy', 'hot', 'network_offline']);
 
 export function DemoLab({ open, onClose }: {open: boolean; onClose: () => void}) {
   const { data: state } = useDesk();
@@ -27,7 +28,9 @@ export function DemoLab({ open, onClose }: {open: boolean; onClose: () => void})
   const scenarioMutation = useDeskMutation<Scenario>(scenario => api<DeskState>('/demo', { method: 'POST', body: JSON.stringify({ scenario }) }));
   const timingMutation = useDeskMutation<Partial<Settings>, Settings>(settings => api<Settings>('/settings', { method: 'PATCH', body: JSON.stringify(settings) }));
   const rules = state?.rules.filter(r => r.active || r.cooldown_remaining_seconds > 0) ?? [];
+  const pcCamera = state?.vision_source === 'pc_camera';
   async function choose(scenario: Scenario) {
+    if (pcCamera && !pcCameraScenarios.has(scenario)) return;
     try { await scenarioMutation.mutateAsync(scenario); notify(`${demoScenarios.find(item => item.id === scenario)?.title ?? 'Demo'} scenario is running.`); }
     catch (error) { notify(errorMessage(error), 'error'); }
   }
@@ -37,12 +40,13 @@ export function DemoLab({ open, onClose }: {open: boolean; onClose: () => void})
       setFast(true); notify('Presentation timing enabled. Change thresholds in Rules & settings to restore normal timing.');
     } catch (error) { notify(errorMessage(error), 'error'); }
   }
-  return <Modal drawer open={open} onClose={onClose} title="The demo lab" description="Change the conditions at your virtual desk and watch FocusGuard respond. No hardware needed.">
-    <div className="mb-5 inline-flex items-center gap-2 text-xs font-medium text-pine"><FlaskConical className="size-4" />Live simulated sensors. Real rules.</div>
+  return <Modal drawer open={open} onClose={onClose} title="The demo lab" description={pcCamera ? 'Change simulated environment conditions while your PC camera supplies live posture labels.' : 'Change the conditions at your virtual desk and watch FocusGuard respond. No hardware needed.'}>
+    <div className="mb-5 inline-flex items-center gap-2 text-xs font-medium text-pine"><FlaskConical className="size-4" />{pcCamera ? 'PC camera pose + simulated desk sensors.' : 'Live simulated sensors. Real rules.'}</div>
+    {pcCamera && <p className="mb-4 text-xs leading-6 text-muted">Live camera posture and occupancy are not overridden by scenarios. To simulate slouching, absence, or camera failures, choose Use simulated vision in the pose lab.</p>}
     <ErrorNotice error={scenarioMutation.error || timingMutation.error} />
-    <div className="mt-3 grid grid-cols-2 gap-2.5">{demoScenarios.map(({ id, title, description, icon: Icon }) => <button key={id} onClick={() => void choose(id)} disabled={scenarioMutation.isPending || state?.mode !== 'demo'} aria-pressed={state?.scenario === id} className={`flex min-h-28 flex-col items-start rounded-xl border p-4 text-left transition-colors disabled:opacity-50 ${state?.scenario === id ? 'border-sage bg-sage-light' : 'border-line hover:bg-sage-light/50'}`}><Icon className="mb-3 size-5 text-sage" /><strong className="text-xs font-semibold text-ink">{title}</strong><span className="mt-1.5 text-[10px] leading-5 text-muted">{description}</span></button>)}</div>
+    <div className="mt-3 grid grid-cols-2 gap-2.5">{demoScenarios.map(({ id, title, description, icon: Icon }) => <button key={id} onClick={() => void choose(id)} disabled={scenarioMutation.isPending || state?.mode !== 'demo' || (pcCamera && !pcCameraScenarios.has(id))} aria-pressed={state?.scenario === id} className={`flex min-h-28 flex-col items-start rounded-xl border p-4 text-left transition-colors disabled:opacity-50 ${state?.scenario === id ? 'border-sage bg-sage-light' : 'border-line hover:bg-sage-light/50'}`}><Icon className="mb-3 size-5 text-sage" /><strong className="text-xs font-semibold text-ink">{title}</strong><span className="mt-1.5 text-[10px] leading-5 text-muted">{pcCamera && id === 'normal' ? 'Reset the simulated environment' : pcCamera && id === 'network_offline' ? 'Simulated desk sensors become stale' : description}</span></button>)}</div>
     <div className="mt-5 rounded-xl border border-line bg-canvas p-4"><h3 className="text-xs font-semibold">What your desk is noticing</h3>{rules.length ? rules.map(rule => <div key={rule.id} className="mt-3 flex justify-between gap-3 text-[11px]"><span className="text-muted">{humanize(rule.id)}</span><strong className="font-medium text-amber-700">{rule.cooldown_remaining_seconds > 0 ? `${Math.ceil(rule.cooldown_remaining_seconds)}s cooldown` : `${formatNumber(rule.elapsed_seconds, 1)}s / ${formatNumber(rule.threshold_seconds)}s`}</strong></div>) : <p className="mt-2 text-xs leading-6 text-muted">FocusGuard waits for a sustained condition. One uncertain frame won’t trigger a warning.</p>}</div>
     <div className="my-6 flex items-center gap-4"><div><h3 className="text-xs font-semibold">Presentation timing</h3><p className="mt-2 text-xs leading-6 text-muted">Shorter delays and a 30-second break interval. These settings persist until changed.</p></div><Button variant="secondary" onClick={() => void enableFastRules()} disabled={timingMutation.isPending} className="shrink-0">{fast ? 'Fast rules enabled' : 'Enable fast rules'}</Button></div>
-    <div className="flex gap-3 rounded-xl bg-sage-light p-4 text-xs leading-6 text-muted"><Info className="mt-1 size-4 shrink-0 text-sage" /><p>Demo readings, confidence, and FPS are simulated. Physical devices are never controlled in demo mode.</p></div>
+    <div className="flex gap-3 rounded-xl bg-sage-light p-4 text-xs leading-6 text-muted"><Info className="mt-1 size-4 shrink-0 text-sage" /><p>{pcCamera ? 'Pose, landmark confidence, and FPS come from your PC camera. Environment and centimetre distances remain simulated.' : 'Demo readings, confidence, and FPS are simulated.'} Physical devices are never controlled in demo mode.</p></div>
   </Modal>;
 }

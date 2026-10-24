@@ -35,7 +35,7 @@ For frontend development, keep the API running at port 8000 and run `npm --prefi
 5. Inspect trends, the posture timeline, and warning heatmap in **Analytics**. Download timestamped CSV data with **Export data**.
 6. Tune thresholds, weights, reminders, and lamp/fan overrides in **Rules & settings**. Cloud summaries are opt-in. Fast demo timing persists until you change it.
 
-The desk illustration displays a categorical posture state; it is explicitly **not a live camera feed**. The real camera preview runs locally on the Raspberry Pi.
+The desk illustration displays a categorical posture state. For a real webcam demo on this PC, use **Overview → PC camera · pose lab → Start PC camera**, choose Front/Side and **Calibrate upright posture**. MediaPipe runs locally in a browser worker with a skeleton overlay and posture labels. The remaining demo sensors stay simulated. **Stop camera** releases the camera; **Use simulated vision** explicitly restores generated posture input. See the [PC camera guide](docs/PC_CAMERA.md) for setup, privacy, calibration and limitations. Pi camera preview remains available through the hardware adapter.
 
 ## Technology choices
 
@@ -45,6 +45,7 @@ The desk illustration displays a categorical posture state; it is explicitly **n
 | Frontend tooling | Node.js 24 LTS, npm lockfile, Vite 8, ESLint | Reproducible builds, hot reload, static analysis |
 | Frontend data and forms | TanStack Query 5, React Router 7, React Hook Form + Zod | Server-state caching, live updates, navigation and validated settings |
 | Charts and UI | Recharts 3, Lucide React | Time-series charts and consistent icons |
+| PC camera demo | MediaPipe Tasks Vision 0.10.32, browser Web Worker | Local webcam landmarks, calibrated posture labels, same-origin versioned WASM/model assets |
 | Local service | Python, FastAPI, Pydantic, Uvicorn | Validated HTTP API, WebSocket feed, deterministic decision engine |
 | Local journal | SQLite with timestamped records | Zero-service demo, settings/sessions/history persistence |
 | IoT transport | Mosquitto MQTT 3.1.1, Paho, PubSubClient | Distributed sensor metadata, events, configuration, expiring actuator commands |
@@ -82,7 +83,7 @@ Switch **Devices & network → Data source → Real hardware**, or start with ` 
 
 ## Privacy and failure behavior
 
-- Video inference and optional preview stay on the Pi; only derived posture metadata is published. The sound sensor sends amplitude, not speech.
+- Video inference and preview stay on the capturing PC browser or Pi; only derived posture metadata reaches the local service. The sound sensor sends amplitude, not speech. The pinned browser runtime, model provenance and MediaPipe metrics-policy scope are documented in [PC_CAMERA.md](docs/PC_CAMERA.md).
 - Low-confidence or stale vision is excluded from posture warnings. Independent environment sensors continue when the camera fails.
 - Rules use sustained conditions and cooldowns. No actuator depends on a cloud AI response.
 - Cloud AI is disabled by default. Configure `BEDROCK_MODEL_ID` and AWS credentials on the server, then enable consent in settings. Session summaries send an allowlisted aggregate object. Failed or unconfigured AI falls back to an explicitly labeled local summary.

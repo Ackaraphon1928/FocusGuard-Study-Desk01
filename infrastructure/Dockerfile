@@ -1,6 +1,7 @@
 FROM node:24.22.1-alpine AS frontend-build
 WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
+COPY frontend/scripts/ ./scripts/
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build

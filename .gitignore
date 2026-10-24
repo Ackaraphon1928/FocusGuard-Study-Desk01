@@ -23,5 +23,11 @@ evaluation/capture*.csv
 .tools/
 node_modules/
 frontend/dist/
+frontend/public/vision/wasm/
+frontend/public/vision/*.task
+frontend/public/vision/*.tmp
+frontend/public/vision/assets.json
+frontend/public/vision/pose.worker.js
 *.tsbuildinfo
 coverage/
+IMG_dataset/

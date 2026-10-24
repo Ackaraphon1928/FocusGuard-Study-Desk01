@@ -2,7 +2,26 @@
 
 Checked on 24 October 2026 in the supplied Windows workspace. The current frontend is React / TypeScript / Tailwind, built with Node.js 24 LTS and Vite.
 
-## Current migration checks
+## PC camera / MediaPipe checks
+
+The browser-camera implementation was checked after the React migration on the same date:
+
+| Check | Result |
+|---|---|
+| Python behavioral/integration suite | **76 tests passed**; includes strict PC metadata, source guards, fresh/stale observations, unknown/multiple-person inputs, no fake fallback, sustained warnings, session splitting and CSV/event/Influx provenance |
+| React / TypeScript suite | **109 tests passed** in 11 Vitest files; includes 33 calibrated geometry/temporal classifier cases, metadata allowlist/bounds, fake-camera permission/worker/frame lifecycle, late startup cancellation, device loss, Stop, unmount and hidden-tab cleanup |
+| Typecheck and production build | Strict TypeScript and Vite production build passed; the classic worker is built separately and model/WASM copied into `dist/vision/` |
+| Dependency and model setup | Clean `npm ci` passed; source-absent Docker-style install prepared the official model and deferred worker bundling until source is available. This is a dependency-stage check, not a running-container test |
+| Model integrity | Local and served model is **5,777,746 bytes**; SHA256 `59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a` matched |
+| Classic worker compatibility | Both prepared and compiled **143,157-byte** worker artifacts parse as classic JavaScript via Node `vm.Script`; the pinned WASM loader's `importScripts` path is present |
+| HTTP assets and live metadata | **21 checks passed** across production port 8000 and Vite port 5173: root, model, both WASM runtime/loader pairs, manifest hashes, WASM MIME type, worker, REST state and same-origin WebSocket metadata; raw source remains hidden in production |
+| Mutation boundaries | Actual HTTP checks rejected a PC-source request containing frame fields with 422 on both origins, and foreign-origin writes with 403; the selected source was unchanged |
+| Launcher | PowerShell parser passed; `start.ps1` launched the updated API with compiled dashboard successfully |
+| Real webcam inference and visual review | **Not exercised**: no controllable browser was connected in this session. jsdom tests use fake camera/worker objects; they do not execute MediaPipe WASM, verify actual camera permissions, establish image accuracy or measure real FPS |
+
+Run the [PC camera guide](PC_CAMERA.md) in a desktop browser to verify actual capture, model initialization, upright calibration, all posture labels, low light, cropped hips, multiple people and camera shutdown. The default source is simulated; selecting PC vision uses actual webcam labels with clearly labeled synthetic environment/ToF inputs. No real-world posture benchmark is claimed.
+
+## Earlier React migration checks
 
 | Check | Result |
 |---|---|
@@ -40,7 +59,7 @@ React behavior tests run in jsdom. These do not establish browser layout, mobile
 
 The Docker engine was stopped during the earlier implementation. The new Dockerfile builds the frontend in a Node stage and copies compiled assets into the Python runtime; the containers, live InfluxDB queries, and Grafana runtime still require deployment verification. MQTT behavior and external AI boundaries are tested with controlled adapters.
 
-No physical ESP32, Pi, camera, sensors, or actuators were attached. Compiled firmware does not establish successful flashing, electrical behavior, sensor accuracy, camera inference speed, or physical latency. Follow [HARDWARE.md](HARDWARE.md), then collect actual results with [the evaluation protocol](../evaluation/README.md).
+No physical ESP32/Pi sensor or actuator integration was exercised, and real PC camera inference remains unverified in this session. Compiled firmware does not establish successful flashing, electrical behavior, sensor accuracy, camera inference speed, or physical latency. Follow [HARDWARE.md](HARDWARE.md), then collect actual results with [the evaluation protocol](../evaluation/README.md).
 
 Re-run checks from the project root after installing dependencies:
 
@@ -52,4 +71,4 @@ npm --prefix frontend test
 npm --prefix frontend run build
 ```
 
-The running demo produces clearly labeled synthetic readings. It does not contain claimed hardware benchmark results.
+The default demo produces clearly labeled synthetic readings. Its optional PC camera input is recorded separately from synthetic vision; the remaining demo sensors stay simulated. Neither mode contains claimed hardware benchmark results.
