@@ -32,7 +32,8 @@ describe('React workspace routes and privacy', () => {
     mockMonitoring();
     renderWorkspace(<App />);
     const user = userEvent.setup();
-    expect(await screen.findByRole('heading', { name: 'Your desk, at a glance' })).toBeInTheDocument();
+    // The first route is a lazy chunk; allow cold imports to finish under load.
+    expect(await screen.findByRole('heading', { name: 'Your desk, at a glance' }, { timeout: 5000 })).toBeInTheDocument();
     const nav = screen.getByRole('navigation', { name: 'Main navigation' });
     await user.click(within(nav).getByRole('link', { name: 'Session history' }));
     expect(await screen.findByRole('heading', { name: 'Your session journal' })).toBeInTheDocument();
@@ -49,7 +50,7 @@ describe('React workspace routes and privacy', () => {
     mockMonitoring();
     renderWorkspace(<App />);
     const user = userEvent.setup();
-    await screen.findByRole('heading', { name: 'Your desk, at a glance' });
+    await screen.findByRole('heading', { name: 'Your desk, at a glance' }, { timeout: 5000 });
     await user.click(screen.getByRole('button', { name: 'How it works' }));
     expect(screen.getByRole('dialog', { name: 'Your camera stays at your desk.' })).toBeInTheDocument();
     for (const video of document.querySelectorAll('video')) expect(video.srcObject).toBeFalsy();
@@ -70,7 +71,8 @@ describe('React workspace routes and privacy', () => {
     expect(await screen.findByText('14.3 FPS')).toBeInTheDocument();
     expect(screen.getByText('Measured camera processing rate on the Python backend machine.')).toBeInTheDocument();
     expect(screen.queryByText(/Simulated value; run/)).not.toBeInTheDocument();
-    expect(screen.getByText('Mixed vision sources')).toBeInTheDocument();
+    // Current FPS and historical readings arrive through separate queries.
+    expect(await screen.findByText('Mixed vision sources')).toBeInTheDocument();
     expect(screen.getAllByTitle(/· PC camera/).length).toBeGreaterThan(0);
     expect(screen.getAllByTitle(/· Simulated/).length).toBeGreaterThan(0);
     expect(screen.getByText('Simulated distance · not measured by webcam')).toBeInTheDocument();
@@ -85,6 +87,7 @@ describe('React workspace routes and privacy', () => {
     mockMonitoring(state, historyFixture, { ...metricsFixture, vision_source: 'simulated', observed_fps: 99 });
     renderWorkspace(<App />, '/analytics');
     expect(await screen.findByText('11.2 FPS')).toBeInTheDocument();
+    await screen.findByRole('img', { name: 'Posture timeline from stored sensor observations' });
     expect(screen.queryByText('99.0 FPS')).not.toBeInTheDocument();
     expect(screen.queryByText('Mixed vision sources')).not.toBeInTheDocument();
   });

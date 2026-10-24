@@ -93,6 +93,7 @@ class FocusGuardEngine:
         # Camera selection is deliberately runtime-only. Restarting never turns
         # on a browser camera or resumes a previous person's observations.
         self.vision_source = "simulated" if mode == "demo" else "gateway"
+        self.vision_input = "python_backend"
         self.scenario = "normal"
         self.last_step = now
         self.last_sample = None
@@ -131,12 +132,15 @@ class FocusGuardEngine:
         vision_source = metadata.pop("vision_source", self.vision_source)
         if vision_source not in {"simulated", "pc_camera", "gateway", "unknown"}:
             raise ValueError("Invalid event vision source")
-        data = {"id": uuid.uuid4().hex, "event_type": event_type, "severity": severity, "message": message, "timestamp": iso(now), "mode": self.mode, "vision_source": vision_source, **metadata}
+        vision_input = metadata.pop("vision_input", self._effective_vision_input(vision_source))
+        if vision_input not in {None, "python_backend", "pc_camera"}:
+            raise ValueError("Invalid event vision input")
+        data = {"id": uuid.uuid4().hex, "event_type": event_type, "severity": severity, "message": message, "timestamp": iso(now), "mode": self.mode, "vision_source": vision_source, "vision_input": vision_input, **metadata}
         self.store.save_event(data, now)
         logger = logging.getLogger("focusguard.engine")
         logger.log(logging.WARNING if severity in {"warning", "critical"} else logging.INFO,
-                   "event=%s mode=%s vision=%s session=%s message=%s", event_type, self.mode,
-                   vision_source, metadata.get("session_id", "-"), message)
+                   "event=%s mode=%s vision=%s input=%s session=%s message=%s", event_type, self.mode,
+                   vision_source, vision_input or "-", metadata.get("session_id", "-"), message)
         return data
 
     def ingest(self, topic, payload, now):
@@ -257,7 +261,7 @@ class FocusGuardEngine:
             return self.state(now)
 
     def set_vision_source(self, source, now):
-        """Choose simulated pose or browser-local pose metadata in demo mode."""
+        """Choose simulated pose or Python-computed camera metadata in demo mode."""
         with self.lock:
             if self.mode != "demo":
                 raise ValueError("PC camera demo requires demo mode")
@@ -283,6 +287,40 @@ class FocusGuardEngine:
                 self.scenario = "normal"
             self.last_sample = None
             self.event("VISION_SOURCE_CHANGED", f"Demo vision source: {source}.", now, vision_source=source)
+            self.step(now)
+            return self.state(now)
+
+    def _effective_vision_input(self, source=None):
+        source = self.vision_source if source is None else source
+        if source == "pc_camera":
+            return self.vision_input
+        return "python_backend" if source == "gateway" else None
+
+    def set_vision_input(self, mode, now):
+        """Separate evidence and sessions when the physical camera input changes."""
+        if mode not in {"python_backend", "pc_camera"}:
+            raise ValueError("Vision input must be python_backend or pc_camera")
+        with self.lock:
+            if self.mode != "demo" and mode == "pc_camera":
+                raise ValueError("Browser PC camera requires demo mode")
+            if self.vision_input == mode:
+                return self.state(now)
+            if self.vision_source == "pc_camera":
+                self.step(now)
+                if self.session:
+                    self._end_session(now, "vision_input_changed")
+                self.sources.pop(VISION_TOPIC, None)
+                self.condition_since.clear()
+                self.last_warning.clear()
+                self.buzzer_until = 0.0
+                self.present = False
+                self.occupancy = "EMPTY"
+                self.absent_since = None
+                self.auto_suppressed = False
+                self.last_sample = None
+            self.vision_input = mode
+            self.event("VISION_INPUT_CHANGED", f"Python vision input: {mode}.", now,
+                       vision_input=mode)
             self.step(now)
             return self.state(now)
 
@@ -318,6 +356,7 @@ class FocusGuardEngine:
                 self._end_session(now, "mode_changed")
             self.mode = mode
             self.vision_source = "simulated" if mode == "demo" else "gateway"
+            self.vision_input = "python_backend"
             self.scenario = "normal"
             self.sources.clear()
             self.condition_since.clear()
@@ -435,6 +474,7 @@ class FocusGuardEngine:
     def _start_session(self, now):
         self.session = {"id": uuid.uuid4().hex[:12], "started_at": iso(now), "started_epoch": now, "state": "ACTIVE", "mode": self.mode, "vision_source": self.vision_source, "elapsed_seconds": 0.0, "sitting_seconds": 0.0, "continuous_sitting_seconds": 0.0, "screen_seconds": 0.0, "breaks": 0, "good_posture_seconds": 0.0, "observed_posture_seconds": 0.0, "score_integral": 0.0, "score_seconds": 0.0, "good_posture_percent": None, "average_score": None, "slouch_events": 0, "too_close_events": 0, "noise_warning_seconds": 0.0, "lux_integral": 0.0, "lux_seconds": 0.0, "temperature_integral": 0.0, "temperature_seconds": 0.0, "summary": None, "pause_reason": None, "sample_count": 0}
         self.auto_suppressed = False
+        self.session["vision_input"] = self._effective_vision_input()
         self.event("SESSION_STARTED", "Study session started.", now)
 
     def _end_session(self, now, reason="user"):
@@ -650,6 +690,7 @@ class FocusGuardEngine:
                 self.last_sample = now
                 point = {
                     "timestamp": iso(now), "mode": self.mode, "vision_source": self.vision_source,
+                    "vision_input": self._effective_vision_input(),
                     "score": self.score["total"], "occupied": self.present,
                     "vision_confidence": self.sensors["confidence"],
                     **{key: self.sensors[key] for key in (
@@ -676,7 +717,7 @@ class FocusGuardEngine:
                 source = self.sources.get(topic)
                 fresh = source is not None and now - source["seen"] <= self.settings["sensor_stale_seconds"] and now - source["captured"] <= self.settings["sensor_stale_seconds"]
                 available = fresh and (device_id != "vision" or self.sensors["vision_available"])
-                devices.append({"id": device_id, "name": "PC camera · local MediaPipe" if device_id == "vision" and self.vision_source == "pc_camera" else name,
+                devices.append({"id": device_id, "name": ("PC browser camera · Python MediaPipe" if self.vision_input == "pc_camera" else "Backend camera · Python MediaPipe") if device_id == "vision" and self.vision_source == "pc_camera" else name,
                                 "status": "online" if available else "offline", "last_seen": iso(source["seen"]) if source else None,
                                 "topic": topic, "simulated": self.mode == "demo" and (device_id != "vision" or self.vision_source == "simulated"),
                                 **({"source": self.vision_source} if device_id == "vision" else {})})
@@ -689,7 +730,7 @@ class FocusGuardEngine:
                 session["break_interval_effective_seconds"] = self.settings["break_interval_minutes"] * 60 * adaptation
                 session["eye_break_due_in_seconds"] = max(0, self.settings["eye_break_interval_minutes"] * 60 - session["screen_seconds"])
             vision = self.sources.get(VISION_TOPIC)
-            return {"mode": self.mode, "vision_source": self.vision_source, "vision_last_seen": iso(vision["seen"]) if vision else None, "now": iso(now), "running": bool(session and session["state"] == "ACTIVE"), "scenario": self.scenario, "occupancy": self.occupancy, "sensors": deepcopy(self.sensors), "score": deepcopy(self.score), "session": session, "actuators": deepcopy(self.actuators), "devices": devices, "events": self.store.events(30, mode=self.mode), "settings": deepcopy(self.settings), "rules": deepcopy(self.rules), "privacy": {"video_upload": False, "audio_recording": False, "cloud_ai_consent": self.settings["cloud_ai_consent"], "stored_data": "Derived sensor metadata and aggregate session statistics only"}, "health": {"mqtt": "demo" if self.mode == "demo" else "not_configured", "influxdb": "not_configured", "ai": "consent_required" if not self.settings["cloud_ai_consent"] else "not_configured", "storage": "local_sqlite", "vision": "online" if self.sensors["vision_available"] else "offline"}}
+            return {"mode": self.mode, "vision_source": self.vision_source, "vision_input": self._effective_vision_input(), "vision_last_seen": iso(vision["seen"]) if vision else None, "now": iso(now), "running": bool(session and session["state"] == "ACTIVE"), "scenario": self.scenario, "occupancy": self.occupancy, "sensors": deepcopy(self.sensors), "score": deepcopy(self.score), "session": session, "actuators": deepcopy(self.actuators), "devices": devices, "events": self.store.events(30, mode=self.mode), "settings": deepcopy(self.settings), "rules": deepcopy(self.rules), "privacy": {"video_upload": self.vision_source == "pc_camera" and self.vision_input == "pc_camera", "camera_frame_transport": "browser_to_python" if self.vision_source == "pc_camera" and self.vision_input == "pc_camera" else "backend_local", "cloud_video_upload": False, "audio_recording": False, "cloud_ai_consent": self.settings["cloud_ai_consent"], "stored_data": "Derived sensor metadata and aggregate session statistics only"}, "health": {"mqtt": "demo" if self.mode == "demo" else "not_configured", "influxdb": "not_configured", "ai": "consent_required" if not self.settings["cloud_ai_consent"] else "not_configured", "storage": "local_sqlite", "vision": "online" if self.sensors["vision_available"] else "offline"}}
 
     def session_aggregates(self, session):
         # Deliberate allowlist is the entire cloud boundary. No samples, event
@@ -699,4 +740,4 @@ class FocusGuardEngine:
     def observed_metrics(self):
         with self.lock:
             latencies = sorted(self.metrics["latencies_ms"])
-            return {"telemetry_messages": self.metrics["telemetry_messages"], "invalid_messages": self.metrics["invalid_messages"], "observed_fps": self.sensors["fps"], "vision_source": self.vision_source, "vision_confidence": self.sensors["confidence"], "ingestion_latency_ms": {"mean": round(sum(latencies) / len(latencies), 2) if latencies else None, "p95": round(latencies[max(0, math.ceil(.95 * len(latencies)) - 1)], 2) if latencies else None, "samples": len(latencies), "note": "Publisher timestamp to gateway receipt; synchronized clocks required. Simulator has no measured hardware latency."}, "warning_counts": deepcopy(self.metrics["warning_counts"]), "posture_accuracy": None, "distance_mae_cm": None, "note": ("PC camera FPS is measured by the Python backend; environment, seat, motion and distance remain simulated. " if self.vision_source == "pc_camera" else "") + "Accuracy and MAE require labeled ground truth; no benchmark values are fabricated.", "mode": self.mode}
+            return {"telemetry_messages": self.metrics["telemetry_messages"], "invalid_messages": self.metrics["invalid_messages"], "observed_fps": self.sensors["fps"], "vision_source": self.vision_source, "vision_input": self._effective_vision_input(), "vision_confidence": self.sensors["confidence"], "ingestion_latency_ms": {"mean": round(sum(latencies) / len(latencies), 2) if latencies else None, "p95": round(latencies[max(0, math.ceil(.95 * len(latencies)) - 1)], 2) if latencies else None, "samples": len(latencies), "note": "Publisher timestamp to gateway receipt; synchronized clocks required. Simulator has no measured hardware latency."}, "warning_counts": deepcopy(self.metrics["warning_counts"]), "posture_accuracy": None, "distance_mae_cm": None, "note": ("PC camera FPS is measured by the Python backend; environment, seat, motion and distance remain simulated. " if self.vision_source == "pc_camera" else "") + "Accuracy and MAE require labeled ground truth; no benchmark values are fabricated.", "mode": self.mode}

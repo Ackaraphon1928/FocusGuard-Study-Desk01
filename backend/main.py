@@ -9,6 +9,9 @@ import os
 from pathlib import Path
 import time
 from typing import Any, Literal
+from urllib.parse import urlsplit
+
+from anyio import CancelScope
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
@@ -20,6 +23,7 @@ from .integrations import InfluxWriter, MqttBridge, SummaryService
 from .storage import Store
 from .logging_config import configure_logging
 from .vision.service import LocalVisionService, unavailable_metadata
+from .vision.input_mode import InputModeCoordinator
 
 VISION_TOPIC = "focusguard/gateway/vision"
 
@@ -79,6 +83,13 @@ class VisionPreviewRequest(StrictModel):
     enabled: bool
 
 
+class VisionInputRequest(StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    mode: Literal["python_backend", "pc_camera"]
+    view: Literal["front", "side"] | None = None
+    token: str | None = Field(default=None, min_length=1, max_length=256)
+
+
 class TelemetryRequest(StrictModel):
     topic: str
     payload: dict[str, Any]
@@ -98,6 +109,7 @@ class Runtime:
         self.camera_mode = None
         self.vision_controls = asyncio.Lock()
         self.vision = (vision_factory or LocalVisionService)(self._receive_vision_metadata)
+        self.vision_input = InputModeCoordinator(self)
 
     def _receive_vision_metadata(self, metadata):
         """Native worker -> engine; obsolete workers cannot cross mode boundaries."""
@@ -116,6 +128,8 @@ class Runtime:
                 self.influx.enqueue(point)
 
     def start_vision(self, camera_index=0, view="front"):
+        if self.vision_input.active:
+            raise RuntimeError("Close PC camera mode before starting the backend camera")
         snapshot = self.vision.snapshot()
         if snapshot["status"] in {"loading", "running"}:
             if snapshot["cameraIndex"] != camera_index or snapshot["view"] != view:
@@ -183,8 +197,9 @@ class Runtime:
         state["health"]["influx_pending"] = len(self.influx.pending)
         state["health"]["influx_dropped"] = self.influx.dropped
         state["actuator_ack"] = self.mqtt.last_ack
-        snapshot = self.vision.snapshot()
+        snapshot = self.vision_input.snapshot()
         state["vision_runtime"] = {key: snapshot[key] for key in ("status", "delegate", "cameraIndex", "view", "previewEnabled")}
+        state["vision_runtime"]["inputMode"] = snapshot["inputMode"]
         return state
 
     async def loop(self):
@@ -225,7 +240,11 @@ def create_app(db_path=None, mode=None, background=True, frontend_dir=None, visi
                     runtime.start_vision(int(os.getenv("CAMERA_INDEX", "0")), os.getenv("CAMERA_VIEW", "front"))
             yield
         finally:
-            await asyncio.to_thread(runtime.stop_vision)
+            # A disconnect/idle watchdog may already be restoring a native
+            # camera. Finish that handoff before the final shutdown stop.
+            async with runtime.vision_controls:
+                await runtime.vision_input.cancel()
+                await asyncio.to_thread(runtime.stop_vision)
             if task:
                 task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -266,42 +285,64 @@ def create_app(db_path=None, mode=None, background=True, frontend_dir=None, visi
 
     @application.get("/api/vision/status")
     async def vision_status():
-        return runtime().vision.snapshot()
+        return runtime().vision_input.snapshot()
+
+    @application.post("/api/vision/input")
+    async def vision_input(data: VisionInputRequest):
+        owner = runtime()
+        async with owner.vision_controls:
+            if data.mode == "pc_camera":
+                if data.token is not None:
+                    raise HTTPException(422, "A token is only accepted when closing PC camera mode")
+                try:
+                    result = await owner.vision_input.activate(data.view or owner.vision.snapshot()["view"])
+                except RuntimeError as exc:
+                    raise HTTPException(409, str(exc))
+            else:
+                if owner.vision_input.active and not owner.vision_input.owns(data.token):
+                    raise HTTPException(409, "Only the active PC camera client can restore its backend camera profile")
+                result = await owner.vision_input.restore()
+            await owner.process_events()
+            return result
 
     @application.post("/api/vision/start")
     async def vision_start(data: VisionStartRequest):
         async with runtime().vision_controls:
             try:
-                result = await asyncio.to_thread(runtime().start_vision, data.camera_index, data.view)
+                await asyncio.to_thread(runtime().start_vision, data.camera_index, data.view)
             except RuntimeError as exc:
                 raise HTTPException(409, str(exc))
             await runtime().process_events()
-            return result
+            return runtime().vision_input.snapshot()
 
     @application.post("/api/vision/stop")
     async def vision_stop(data: EmptyRequest = EmptyRequest()):
         async with runtime().vision_controls:
-            result = await asyncio.to_thread(runtime().stop_vision)
+            await runtime().vision_input.cancel()
+            await asyncio.to_thread(runtime().stop_vision)
             await runtime().process_events()
-            return result
+            return runtime().vision_input.snapshot()
 
     @application.post("/api/vision/calibrate")
     async def vision_calibrate(data: EmptyRequest = EmptyRequest()):
         async with runtime().vision_controls:
             try:
-                return runtime().vision.calibrate()
+                runtime().vision.calibrate()
+                return runtime().vision_input.snapshot()
             except RuntimeError as exc:
                 raise HTTPException(409, str(exc))
 
     @application.post("/api/vision/view")
     async def vision_view(data: VisionViewRequest):
         async with runtime().vision_controls:
-            return runtime().vision.set_view(data.view)
+            runtime().vision.set_view(data.view)
+            return runtime().vision_input.snapshot()
 
     @application.post("/api/vision/preview")
     async def vision_preview(data: VisionPreviewRequest):
         async with runtime().vision_controls:
-            return runtime().vision.set_preview(data.enabled)
+            runtime().vision.set_preview(data.enabled)
+            return runtime().vision_input.snapshot()
 
     @application.get("/api/vision/preview.mjpeg", include_in_schema=False)
     async def vision_preview_stream(request: Request):
@@ -380,6 +421,7 @@ def create_app(db_path=None, mode=None, background=True, frontend_dir=None, visi
             raise HTTPException(409, "PC camera demo requires demo mode")
         async with runtime().vision_controls:
             if data.source == "simulated":
+                await runtime().vision_input.cancel()
                 await asyncio.to_thread(runtime().stop_vision)
             result = runtime().engine.set_vision_source(data.source, time.time())
             await runtime().process_events()
@@ -404,6 +446,7 @@ def create_app(db_path=None, mode=None, background=True, frontend_dir=None, visi
     async def mode_change(data: ModeRequest):
         async with runtime().vision_controls:
             if data.mode != runtime().engine.mode:
+                await runtime().vision_input.cancel()
                 await asyncio.to_thread(runtime().stop_vision)
             # An explicit safe command clears physical outputs before demo mode.
             if runtime().engine.mode == "hardware" and data.mode == "demo":
@@ -464,6 +507,76 @@ def create_app(db_path=None, mode=None, background=True, frontend_dir=None, visi
                 await asyncio.sleep(1)
         except (WebSocketDisconnect, RuntimeError):
             pass
+
+    @application.websocket("/api/vision/pc-camera")
+    async def pc_camera_frames(websocket: WebSocket):
+        # WebSocket does not pass through HTTP mutation middleware. The browser
+        # token travels in a protocol header, never a logged URL query string.
+        origin = urlsplit(websocket.headers.get("origin", ""))
+        expected_scheme = "https" if websocket.url.scheme == "wss" else "http"
+        protocols = [part.strip() for part in websocket.headers.get("sec-websocket-protocol", "").split(",")]
+        same_origin = (origin.scheme == expected_scheme and origin.netloc == websocket.headers.get("host")
+                       and origin.path in {"", "/"} and not origin.query and not origin.fragment)
+        if (not same_origin or websocket.headers.get("sec-fetch-site") == "cross-site"
+                or len(protocols) != 2 or protocols[0] != "focusguard-pc"):
+            await websocket.close(code=1008)
+            return
+        token = protocols[1]
+        owner = runtime()
+        async with owner.vision_controls:
+            if not owner.vision_input.attach(token):
+                await websocket.close(code=1008)
+                return
+            input_session = owner.vision.session_identity()
+        try:
+            await websocket.accept(subprotocol="focusguard-pc")
+            while owner.vision_input.owns(token):
+                message = await asyncio.wait_for(websocket.receive(), timeout=owner.vision_input.IDLE_TIMEOUT)
+                if message["type"] == "websocket.disconnect":
+                    break
+                if not owner.vision_input.owns(token):
+                    break
+                jpeg = message.get("bytes")
+                if jpeg is None or not jpeg.startswith(b"\xff\xd8\xff"):
+                    await websocket.close(code=1003, reason="Send one binary JPEG frame at a time")
+                    break
+                if len(jpeg) > 512 * 1024:
+                    await websocket.close(code=1009, reason="Camera frame exceeds 512 KiB")
+                    break
+                inference_timeout = 45.0 if owner.vision.snapshot()["status"] == "loading" else 8.0
+                owner.vision_input.touch(inference_timeout + 2)
+                # Await one complete inference before acknowledging it. The
+                # client sends its next frame only after this ACK (backpressure).
+                snapshot = await asyncio.to_thread(owner.vision.process_browser_frame, jpeg, timeout=inference_timeout,
+                                                  expected_session=input_session)
+                if not owner.vision_input.owns(token):
+                    break
+                owner.vision_input.touch()
+                snapshot["inputMode"] = "pc_camera"
+                await websocket.send_json(snapshot)
+        except WebSocketDisconnect:
+            pass
+        except asyncio.TimeoutError:
+            with suppress(WebSocketDisconnect, RuntimeError):
+                await websocket.close(code=1001, reason="Camera input timed out")
+        except (RuntimeError, ValueError, OSError) as exc:
+            if owner.vision_input.owns(token):
+                log.warning("PC camera frame processing stopped error=%s", type(exc).__name__)
+                with suppress(WebSocketDisconnect, RuntimeError):
+                    snapshot = owner.vision_input.snapshot()
+                    snapshot.update(status="error", error=str(exc), message="PC camera stopped; restoring the backend camera.")
+                    await websocket.send_json(snapshot)
+                    await websocket.close(code=1011, reason="Camera processing stopped")
+        finally:
+            # Shield device handoff from the disconnected ASGI session's cancel
+            # scope. Otherwise a camera can remain between browser/native modes.
+            with CancelScope(shield=True):
+                async with owner.vision_controls:
+                    if owner.vision_input.owns(token):
+                        await owner.vision_input.restore(reason="PC camera connection closed")
+                        await owner.process_events()
+                with suppress(WebSocketDisconnect, RuntimeError, OSError):
+                    await websocket.close(code=1000)
 
     frontend = Path(frontend_dir) if frontend_dir is not None else ROOT / "frontend" / "dist"
     if (frontend / "index.html").is_file():

@@ -18,7 +18,7 @@ Never run two API processes against the same physical actuators: use one Uvicorn
 
 ## Routes
 
-All request bodies are JSON. Unknown values, invalid ranges, unsupported topics,
+HTTP request bodies are JSON. The dedicated PC-camera WebSocket accepts binary JPEG frames as described below. Unknown values, invalid ranges, unsupported topics,
 raw image/audio fields, invalid booleans, and nonfinite numbers are rejected with
 HTTP 422. Unknown sessions return 404. Telemetry submitted in demo mode returns
 409. Browser controls require the same origin as the API (cross-origin writes 403).
@@ -40,6 +40,8 @@ a trusted LAN with an authenticated reverse proxy. Broker credentials stay serve
 | POST | `/api/demo/vision-source` | `{ "source": "simulated" \| "pc_camera" }`; demo only, returns current state |
 | POST | `/api/demo/vision` | Deprecated metadata-only compatibility input; blocked while Python owns vision |
 | GET | `/api/vision/status` | Python camera snapshot, derived observation and runtime diagnostics |
+| POST | `/api/vision/input` | `{ "mode": "pc_camera", "view": "front" }` activates browser demo capture and returns a private `browserToken`; `{ "mode": "python_backend", "token": "..." }` restores prior backend profile |
+| WebSocket | `/api/vision/pc-camera` | Same-origin binary JPEG input; protocols `['focusguard-pc', browserToken]`, JSON snapshot acknowledgement per frame |
 | POST | `/api/vision/start` | `{ "camera_index": 0, "view": "front" }`; starts the camera attached to the backend |
 | POST | `/api/vision/stop` | `{}`; stops capture and clears vision availability without selecting fake vision |
 | POST | `/api/vision/calibrate` | `{}`; requests neutral calibration; 409 unless running |
@@ -67,15 +69,14 @@ History, sessions, events and CSV export accept an optional `mode=demo|hardware`
 query to filter at the database boundary. Every new event carries its source mode;
 legacy events with no source label are returned as `mode:unknown` and are excluded
 from mode-filtered queries. `/api/state` includes only current-mode events.
-New sessions and events also contain `vision_source`. Legacy records may omit it;
+New history points, sessions and events also contain `vision_source` and `vision_input` (`python_backend|pc_camera`, null for simulation). Camera input changes split live-camera sessions and clear sustained evidence. Legacy records may omit these fields;
 do not interpret an absent source as a verified PC-camera observation.
 
 ## Python camera processing
 
-The browser is a controller and viewer. Python captures the camera attached to the
-backend machine, runs MediaPipe, calibrates and classifies posture, then feeds
-derived metadata directly into the engine. No image uploads, browser camera API,
-Web Worker or frontend posture calculation is involved. Install the optional
+The browser controls and views a Python pipeline. Default input captures the camera attached to the
+backend machine. Optional demo PC-camera input transports the browser webcam's JPEG frames to Python. Python runs MediaPipe, calibrates and classifies posture, then feeds
+derived metadata directly into the engine. No Web Worker or frontend posture calculation is involved. Install the optional
 `backend/requirements-vision.txt` and verify the model with
 `python -m backend.vision.model --download`, or use `./start.ps1 -Install -Vision`.
 Native dependencies are imported lazily; the normal simulator works without them.
@@ -103,6 +104,7 @@ Do not also run an independent gateway camera owner against the same device.
   "error": null,
   "message": "Local Python camera processing on CPU. Calibrate while sitting upright.",
   "delegate": "CPU",
+  "inputMode": "python_backend",
   "cameraIndex": 0,
   "view": "front",
   "fps": 14.7,
@@ -138,6 +140,16 @@ No raw normalized/world landmark arrays are exposed (`landmarks` is always empty
 The panel polls at 500 ms; inference and engine updates do not wait for a browser.
 Calibration runs in Python over at least 30 reliable frames. Changing view resets
 that baseline. Confidence measures landmark reliability, not benchmark accuracy.
+
+### Browser PC-camera input and restoration
+
+`POST /api/vision/input` with `mode:pc_camera` is demo-only (409 in hardware workspace). It releases native capture before browser permission is requested and reserves an exclusive in-memory lease. The response contains `browserToken`; normal status/state never exposes it. `view` is optional, defaulting to the current view. Another activation returns 409 while a lease exists.
+
+Connect `/api/vision/pc-camera` with WebSocket subprotocols `['focusguard-pc', browserToken]`; the server selects `focusguard-pc`. No query token is accepted. Origin must exactly match the dashboard host and HTTP/HTTPS scheme. Send complete binary JPEG frames only, maximum 512 KiB and 1280×960/1,228,800 pixels. Headers/dimensions are checked before native decode. Each accepted frame receives a derived `VisionSnapshot` JSON acknowledgement. The frontend keeps one frame in flight; Python also bounds the input queue. Client timestamps, labels and landmark arrays are not accepted. Invalid input closes the connection and restores native input.
+
+`POST /api/vision/input` with `mode:python_backend` and the owning `token` stops browser capture and restores the previous native camera index, view, preview and numeric calibration. Native capture resumes only if previously loading/running. A previous idle/stopped selection stays idle. Browser calibration is separate and never overwrites native `CALIBRATION_FILE`. A wrong/missing token returns 409 while PC mode is active; repeated off after restoration is harmless. Permission failure, browser cleanup and socket disconnect use the same restoration path. An unattached lease expires after 45 seconds; an attached idle socket after 10 seconds. First model initialization gets a bounded longer inference wait.
+
+Explicit `/api/vision/stop`, workspace changes or selecting simulated vision cancel the lease without reopening the prior camera. Starting native capture directly during an active browser lease returns 409. `inputMode` is `python_backend|pc_camera`; both routes retain all inference/calibration in Python. Frame transport is memory-only and is never written to SQLite/Influx/logs or cloud AI. State privacy fields report `video_upload:true` and `camera_frame_transport:browser_to_python` during PC transport, with `cloud_video_upload:false` in both modes.
 
 The optional preview is a separate privacy boundary. `POST /api/vision/preview`
 with `enabled:true` enables server-rendered JPEG frames with skeleton/label text.

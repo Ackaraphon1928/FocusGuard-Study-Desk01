@@ -14,6 +14,7 @@ export interface PoseObservation {
 }
 
 export interface VisionSnapshot {
+  inputMode: 'python_backend' | 'pc_camera';
   status: 'idle' | 'loading' | 'running' | 'stopped' | 'error';
   error: string | null;
   message: string;
@@ -29,6 +30,7 @@ export interface VisionSnapshot {
 }
 
 export const initialVisionSnapshot: VisionSnapshot = {
+  inputMode: 'python_backend',
   status: 'idle', error: null, message: 'Python camera is off. Start it when you are ready.',
   delegate: null, cameraIndex: 0, view: 'front', observation: null,
   fps: 0, inferenceMs: 0, frames: 0, updatedAt: null, previewEnabled: false,

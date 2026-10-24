@@ -1,5 +1,6 @@
 export type DataMode = 'demo' | 'hardware';
 export type VisionSource = 'simulated' | 'pc_camera' | 'gateway';
+export type VisionInput = 'python_backend' | 'pc_camera';
 export type Posture = 'GOOD' | 'SLOUCH' | 'LEAN_FORWARD' | 'LEAN_LEFT_RIGHT' | 'NO_PERSON' | 'UNKNOWN';
 export type Scenario = 'normal' | 'slouch' | 'too_close' | 'dark' | 'noisy' | 'hot' | 'away' | 'camera_offline' | 'occluded' | 'network_offline';
 export type ControlAction = 'start' | 'pause' | 'resume' | 'end' | 'break' | 'finish_break';
@@ -63,6 +64,7 @@ export interface StudySession {
   state: 'ACTIVE' | 'PAUSED' | 'BREAK' | 'ENDED';
   mode: DataMode;
   vision_source?: VisionSource | 'unknown';
+  vision_input?: VisionInput | null;
   elapsed_seconds: number;
   sitting_seconds: number;
   continuous_sitting_seconds: number;
@@ -106,6 +108,7 @@ export interface DeskEvent {
   timestamp: string;
   mode: DataMode | 'unknown';
   vision_source?: VisionSource | 'unknown';
+  vision_input?: VisionInput | null;
   session_id?: string;
   source?: string;
 }
@@ -131,6 +134,7 @@ export interface Rule {
 export interface DeskState {
   mode: DataMode;
   vision_source: VisionSource;
+  vision_input?: VisionInput | null;
   vision_last_seen: string | null;
   now: string;
   running: boolean;
@@ -151,6 +155,8 @@ export interface DeskState {
   rules: Rule[];
   privacy: {
     video_upload: boolean;
+    cloud_video_upload?: boolean;
+    camera_frame_transport?: 'browser_to_python' | 'backend_local';
     audio_recording: boolean;
     cloud_ai_consent: boolean;
     stored_data: string;
@@ -178,6 +184,7 @@ export interface HistoryPoint {
   timestamp: string;
   mode: DataMode;
   vision_source?: VisionSource;
+  vision_input?: VisionInput | null;
   score: number | null;
   distance_cm: number | null;
   seat_pressure: number | null;
@@ -204,6 +211,7 @@ export interface HistoryPoint {
 export interface Metrics {
   mode: DataMode;
   vision_source?: VisionSource;
+  vision_input?: VisionInput | null;
   telemetry_messages: number;
   invalid_messages: number;
   observed_fps: number | null;

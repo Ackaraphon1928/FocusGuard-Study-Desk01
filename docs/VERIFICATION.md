@@ -2,7 +2,24 @@
 
 Checked on 24 October 2026 in the supplied Windows workspace. The current frontend is React / TypeScript / Tailwind, built with Node.js 24 LTS and Vite.
 
-## Current Python backend vision migration
+## Current PC camera demo mode with Python processing
+
+Default input remains the camera attached to the Python backend. The new Demo-only **PC camera mode** captures the browser computer's webcam and sends bounded JPEG frames to the same Python MediaPipe/classifier pipeline. Turning it off restores the prior backend camera profile, numeric calibration and running/idle state. The classifier thresholds are unchanged.
+
+| Check | Result |
+|---|---|
+| Python suite | **237 tests passed**, including 18 browser-service tests, 18 PC-mode/API tests and 3 capture-provenance tests added to the existing 198 |
+| Frontend suite | **88 tests passed** in 10 files, including 17 new browser-camera lifecycle cases. Strict TypeScript and production Vite build passed |
+| Native JPEG transport probe | Real CPU MediaPipe received **39 JPEG frames** through the API WebSocket, reached **30-frame ready calibration**, reported `GOOD`, and restored the previous idle `python_backend` selection after disconnect. The input was a repeated supplied still image, with physical camera opening explicitly forbidden; this is not live-camera performance or accuracy evidence |
+| Handoff and races | Exact index/view/preview/calibration restoration; native running versus idle; separate browser/native calibration persistence; model-loading restoration; late permission/activation/start responses; stale queued executor frames; global stop/workspace/simulation cancellation; shutdown; exclusive browser ownership; disconnected/expired lease recovery |
+| Frame boundary | Same-origin WebSocket with a private subprotocol token, no token in URL/status/cache; JPEG byte/dimension checks before native decode, one frame awaiting inference ACK, no image/landmark recording or logs. PC transport goes to the configured local Python backend, never cloud AI |
+| Classifier tuning replay | Existing frozen landmarks still match **7/7** supplied labels. These remain tuning samples, not an independent benchmark |
+| Served app | **16 HTTP/WebSocket checks passed** across API port 8000 and Vite port 5173: dashboard, public input metadata, token absence, strict mode validation, foreign-origin write/socket rejection and absence of raw dataset/old worker assets. Vite returns its HTML fallback for missing asset URLs; production returns 404 |
+| Setup | `start.ps1 -Vision` restarted the updated application successfully; `pip check` passed with explicit optional Pillow dependency |
+
+Browser camera permission and an actual webcam/Pi/GPU were not exercised. Browser lifecycle tests use fake media/video/canvas/socket objects; the separate native probe uses real MediaPipe CPU inference on JPEGs. See [PC_CAMERA.md](PC_CAMERA.md) for the actual webcam demo procedure. The restored native pipeline is backend-managed and continues after dashboard navigation.
+
+## Previous Python backend vision migration
 
 Capture, native MediaPipe inference, calibration, geometry, posture labels and temporal stabilization now run in Python. React sends controls and renders backend results; the browser SDK, worker, WASM/model delivery and TypeScript classifier were removed. The direct backend camera service and standalone Pi adapter share `backend/vision/posture.py`.
 

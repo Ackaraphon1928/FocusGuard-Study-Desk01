@@ -1,8 +1,8 @@
 ﻿# Python camera and MediaPipe posture processing
 
-Camera capture, MediaPipe landmark extraction, calibration, posture classification and temporal stabilization run in **Python on the backend machine**. Today that machine can be your PC with its webcam; the same pipeline can run on a Raspberry Pi 5. React only sends controls and displays results. Opening the dashboard on another computer does not select that computer's webcam.
+MediaPipe landmark extraction, calibration, posture classification and temporal stabilization run in **Python on the backend machine**. Today that machine can be your PC; the same pipeline can run on a Raspberry Pi 5. The default **Python backend** input captures the camera attached to that machine. Optional **PC camera mode**, available in Demo workspace, captures the webcam of the computer opening the browser and transports its frames to Python.
 
-The canonical classifier is `backend/vision/posture.py`. The standalone Pi gateway imports the same classifier rather than maintaining different posture rules. The frontend's `posture.ts` contains display types only; there is no browser MediaPipe SDK, WASM runtime, worker, camera permission flow or client-side classifier.
+The canonical classifier is `backend/vision/posture.py`. The standalone Pi gateway imports the same classifier rather than maintaining different posture rules. The frontend's `posture.ts` contains display types only. The browser's optional camera capture does not perform MediaPipe inference or classify posture; no browser SDK/WASM is needed.
 
 ## Install and start on the PC
 
@@ -34,7 +34,19 @@ On Linux, substitute `.venv/bin/python`. No camera opens during dependency insta
 
 In **Demo workspace**, the camera replaces vision only. Environment, ToF distance, seat/motion signals and outputs remain simulated. Simulated presence follows fresh reliable camera presence; this is not an independent physical sensor measurement. In **Real hardware**, Python camera metadata joins actual gateway sensors and missing sensor values remain unavailable. Switching mode stops the previous camera owner and clears its evidence.
 
+## PC camera mode for tests and demos
+
+1. In **Demo workspace**, enable **PC camera mode** in the camera panel. Python first releases its native camera, then the browser asks for webcam permission. Use the loopback URL above or an HTTPS deployment for browser camera access. No microphone is requested.
+2. Allow camera permission, select Front/Side and calibrate upright. The video preview is local to the browser; the resulting pose labels, diagnostics and calibration progress come from Python. The browser sends JPEG frames at up to 640×480 and 10 FPS, with only one frame awaiting a Python response.
+3. Disable **PC camera mode** or stop PC capture to release browser tracks and restore the previous backend camera profile. Camera index, view, debug preview and numeric calibration are preserved independently. A previously running/loading backend camera resumes; a previously idle backend selection stays idle. Browser calibration never overwrites the backend's persisted calibration file.
+4. Permission denial, unplugging the browser webcam, hiding/leaving the panel, or losing its WebSocket also closes PC capture and restores the prior backend input. A connection that never attaches expires after 45 seconds; an attached idle connection expires after 10 seconds. Native model startup may take longer for the first result. If reopening the native camera fails, the panel reports its error and the terminal explains it; restart that camera explicitly.
+
+Only one browser PC-camera lease can own the pipeline. A second tab cannot replace it or disable it with another token. A restored native pipeline is backend-managed and continues after navigation; subsequent browser cleanup does not stop it. Switching workspace, explicitly selecting simulation, or the global API Stop cancels the lease without restarting native capture behind the new selection. PC camera mode is disabled in Real hardware workspace; direct Python/Pi capture remains available there.
+
+Camera input changes split sessions and clear posture timers so observations from different cameras are not combined. `inputMode` identifies the current transport; stored live-camera metadata includes `vision_input: python_backend|pc_camera` in addition to the existing `vision_source`. Turning PC mode off selects backend camera input, rather than generated posture.
+
 ## Labels and limits
+
 
 For unattended restarts, set `CALIBRATION_FILE=backend/data/vision-calibration.json`
 before starting the API, calibrate once through the dashboard and leave the camera
@@ -92,7 +104,7 @@ For headless direct-backend capture, configure `FOCUSGUARD_MODE=hardware`, `VISI
 
 `python -m backend.vision.model --download` validates/reuses a project model or explicitly downloads the [official version-1 lite pose bundle](https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task). The SHA256 is `59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a`. Existing verified Pi/model files can be reused. `POSE_MODEL` selects another local path, which must match the pinned artifact. A mismatch fails rather than silently substituting a model.
 
-Raw frames and landmarks exist in Python memory for inference; the normal status JSON contains `landmarks: []` and derived geometry/labels only. The explicitly enabled local MJPEG preview transmits images to the dashboard without saving them. Stop or disable preview to end that stream. SQLite, Influx, CSV and optional Bedrock summaries contain derived/aggregate metadata, never image recordings, audio or landmark arrays. No microphone is opened. This project does not add analytics; Google's [MediaPipe Tasks privacy notice](https://developers.google.com/edge/mediapipe/solutions/tasks#mediapipe_tasks_privacy_notice) describes SDK metrics and on-device inputs. Review SDK behavior when upgrading.
+Raw frames and landmarks exist in memory for inference; the normal status JSON contains `landmarks: []` and derived geometry/labels only. **PC camera mode sends browser JPEG frames to the configured local Python backend**, including over the local network when the browser and backend are on different machines. Its dedicated same-origin, token-bound WebSocket accepts complete JPEGs only, capped at 512 KiB and 1280×960 before native decoding. Frames are not saved, logged or forwarded to cloud AI. Keep the backend on your local machine/trusted local deployment. The explicitly enabled backend MJPEG preview transmits images in the opposite direction without saving them. Stop or disable preview to end that stream. SQLite, Influx, CSV and optional Bedrock summaries contain derived/aggregate metadata, never image recordings, audio or landmark arrays. No microphone is opened. This project does not add analytics; Google's [MediaPipe Tasks privacy notice](https://developers.google.com/edge/mediapipe/solutions/tasks#mediapipe_tasks_privacy_notice) describes SDK metrics and on-device inputs. Review SDK behavior when upgrading.
 
 MediaPipe and the BlazePose GHUM model are Apache-2.0; see the [official model card](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20BlazePose%20GHUM%203D.pdf) for the model family and limitations.
 
@@ -101,7 +113,8 @@ MediaPipe and the BlazePose GHUM model are Apache-2.0; see the [official model c
 | Symptom | Action |
 |---|---|
 | Camera cannot open / device busy | Check backend camera index, connect the camera to the backend machine, close other camera applications, and check OS camera privacy permissions for Python/desktop apps. |
-| Browser is on another PC | Controls still operate the backend machine's camera. There is no browser webcam capture. |
+| Browser is on another PC | Default controls operate the backend machine's camera. Enable PC camera mode in Demo workspace to use the browser computer's webcam; camera access requires a secure browser context. |
+| PC camera permission denied / connection lost | Allow browser camera permission and check the API connection. The previous backend profile is restored automatically; verify its status/terminal before retrying. |
 | Missing `mediapipe`, `cv2` or model | Install `backend/requirements-vision.txt`, run the explicit model setup command, then restart camera processing. The simulator remains usable without these extras. |
 | GPU initialization fails | Read the fallback reason in the terminal. Use CPU for compatibility and benchmark the target Pi separately. |
 | UNKNOWN / calibration never completes | Keep the head and both shoulders visible in Front view, improve lighting and hold still while calibrating. Check reason/candidate and reliable-frame progress. |

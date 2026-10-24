@@ -2,7 +2,7 @@
 
 A local-first smart study desk prototype based on [the project design](FocusGuard_Privacy_Aware_Smart_Study_Desk.md). It combines posture, viewing distance, occupancy, lighting, relative noise, temperature, and humidity into explainable feedback and automated desk controls.
 
-The application runs immediately with a sensor simulator. The same decision engine accepts real MQTT telemetry from the included ESP32 firmware and Raspberry Pi gateway. Simulated values are visibly labeled and kept separate from hardware readings. Camera capture, MediaPipe inference, calibration and posture logic run in Python on the backend PC or Raspberry Pi. React displays derived results and controls the pipeline. Camera frames are not recorded; an optional local debug preview is off by default.
+The application runs immediately with a sensor simulator. The same decision engine accepts real MQTT telemetry from the included ESP32 firmware and Raspberry Pi gateway. Simulated values are visibly labeled and kept separate from hardware readings. Python performs MediaPipe inference, calibration and all posture logic on the backend PC or Raspberry Pi. The default input captures a camera attached to that backend. An optional **PC camera mode** captures the browser computer's webcam for demos and sends bounded JPEG frames to the same Python pipeline. Frames are not recorded or sent to cloud AI; backend debug preview is off by default.
 
 ## Run it
 
@@ -41,7 +41,9 @@ The desk illustration displays a categorical posture state. For real camera proc
 .\start.ps1 -Install -Vision
 ```
 
-Then open **Overview → Python camera · pose lab → Start backend camera**, select the backend camera index and Front/Side, sit upright, and choose **Calibrate upright posture**. Front view supports a reliable head and both shoulders above a desk; hips are optional. Python captures the camera attached to the backend machine, runs MediaPipe and the shared classifier, and logs posture/reason/FPS in the terminal. The panel displays metadata; **Enable local debug preview** optionally streams a skeleton image without recording. The camera is not opened by the browser. In demo mode, the remaining sensors stay simulated. **Stop camera** releases capture; **Use simulated vision** explicitly restores generated posture. See the [Python camera guide](docs/PC_CAMERA.md) for manual setup, debugging and Pi deployment.
+Then open **Overview → Python camera · pose lab → Start backend camera**, select the backend camera index and Front/Side, sit upright, and choose **Calibrate upright posture**. Front view supports a reliable head and both shoulders above a desk; hips are optional. Python logs posture/reason/FPS in the terminal. **Enable local debug preview** optionally streams a skeleton image without recording.
+
+For testing in Demo workspace, enable **PC camera mode** and allow browser camera permission. The browser sends frames to Python for processing and shows a local webcam preview. Calibrate this input separately. **Turn PC camera mode off** to restore the previous Python backend camera index, view, preview and numeric calibration; it resumes if previously running, or stays idle if it was idle. Permission failure or connection loss also releases PC capture and restores the prior backend selection. The remaining demo sensors stay simulated. **Use simulated vision** explicitly selects generated posture. See the [camera guide](docs/PC_CAMERA.md) for setup, debugging and Pi deployment.
 ## Technology choices
 
 | Layer | Implementation | Purpose |

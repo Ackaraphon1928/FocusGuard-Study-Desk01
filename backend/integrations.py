@@ -163,6 +163,8 @@ class InfluxWriter:
         fields = "message=" + InfluxWriter._quoted(event["message"])
         if event.get("vision_source") in {"simulated", "pc_camera", "gateway", "unknown"}:
             fields += ",vision_source=" + InfluxWriter._quoted(event["vision_source"])
+        if event.get("vision_input") in {"python_backend", "pc_camera"}:
+            fields += ",vision_input=" + InfluxWriter._quoted(event["vision_input"])
         if event.get("session_id"):
             fields += ",session_id=" + InfluxWriter._quoted(event["session_id"])
         timestamp = int(datetime.fromisoformat(event["timestamp"].replace("Z", "+00:00")).timestamp() * 1000)
@@ -181,6 +183,8 @@ class InfluxWriter:
         fields.extend(["posture=" + InfluxWriter._quoted(posture), "good_posture=" + str(posture == "GOOD").lower()])
         if point.get("vision_source") in {"simulated", "pc_camera", "gateway", "unknown"}:
             fields.append("vision_source=" + InfluxWriter._quoted(point["vision_source"]))
+        if point.get("vision_input") in {"python_backend", "pc_camera"}:
+            fields.append("vision_input=" + InfluxWriter._quoted(point["vision_input"]))
         for key in ["occupied", "seat_occupied", "motion", "person_detected", "vision_available", "fan", "buzzer", "session_active"]:
             value = point.get(key)
             if isinstance(value, bool):
@@ -304,5 +308,5 @@ class SummaryService:
             self.engine.store.save_session(latest, latest.get("started_epoch", now))
             if self.engine.session and self.engine.session["id"] == session_id:
                 self.engine.session.update(summary=text, summary_source=source, summary_generated_at=iso(now), summary_note=reason)
-            self.engine.event("SUMMARY_CREATED", "Session summary created " + ("with AWS Bedrock." if source == "aws_bedrock" else "locally."), now, session_id=session_id, source=source, mode=session.get("mode", self.engine.mode), vision_source=session.get("vision_source", "unknown"))
+            self.engine.event("SUMMARY_CREATED", "Session summary created " + ("with AWS Bedrock." if source == "aws_bedrock" else "locally."), now, session_id=session_id, source=source, mode=session.get("mode", self.engine.mode), vision_source=session.get("vision_source", "unknown"), vision_input=session.get("vision_input"))
         return {"session_id": session_id, "summary": text, "summary_source": source, "source": source, "cloud_sent": sent, "aggregates": stats, "note": reason}
