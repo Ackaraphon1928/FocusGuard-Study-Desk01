@@ -2,6 +2,8 @@
 
 No hardware measurements are claimed in this repository. `example.synthetic.csv` is a labeled format fixture for checking the metric calculations. It is explicitly synthetic and the CLI refuses it unless `--allow-synthetic` is supplied. Its output must never be presented as project performance.
 
+For the PC webcam's seven user-provided screenshots, use the [local posture tuning workflow](pc_dataset.md). It extracts actual MediaPipe observations locally and replays them through the production TypeScript classifier with `npm --prefix frontend run evaluate:posture`. Those images were used to tune the heuristics; agreement on them is not held-out accuracy. A front webcam now supports reliable head/shoulder geometry with cropped hips; the Pi protocol below still evaluates its separate torso-based classifier.
+
 ## Collect and label posture observations
 
 1. Record the Pi model, 64-bit OS, Python/package versions, camera resolution, camera placement/view, model SHA256, room light and calibration JSON with each experiment. Obtain participant agreement before any local image review. The gateway does not record video or upload frames.
@@ -65,7 +67,7 @@ For complete end-to-end measurement, use a visible physical stimulus and a camer
 | Leave chair | Pause after configured grace; lamp off | FSR/camera absence and state timeline |
 | Motionless seated user | FSR/vision preserve occupancy despite quiet PIR | All three presence channels |
 | Camera unplugged/covered | UNKNOWN or unavailable; no fabricated healthy posture | Availability diagnostic and recovery |
-| Two people/cropped hips | UNKNOWN/ambiguous instead of confident ergonomics | Metadata plus observer log |
+| Two people / required body points occluded | UNKNOWN/ambiguous instead of confident ergonomics; cropped hips alone allow front PC upper-body tracking | Metadata plus observer log |
 | ToF target missing/out of range | Null reading, confidence/coverage reflects missing data | Raw metadata diagnostics and failure count |
 | MQTT lost | Reconnect; Pi watchdog switches outputs off | Broker logs, physical outputs, recovered messages |
 | Bedrock unavailable/consent off | Local summary; monitoring continues | Summary source/fallback note |

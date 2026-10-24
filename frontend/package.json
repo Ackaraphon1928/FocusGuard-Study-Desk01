@@ -9,6 +9,7 @@
   "scripts": {
     "postinstall": "node scripts/prepare-vision-assets.mjs",
     "prepare:vision": "node scripts/prepare-vision-assets.mjs",
+    "evaluate:posture": "node scripts/evaluate-pc-dataset.mjs",
     "predev": "npm run prepare:vision",
     "dev": "vite",
     "prebuild": "npm run prepare:vision",

@@ -12,6 +12,7 @@ infrastructure/secrets
 raspberry_pi/models
 evaluation/results
 .tools
+IMG_dataset
 **/node_modules
 frontend/dist
 frontend/public/vision/wasm

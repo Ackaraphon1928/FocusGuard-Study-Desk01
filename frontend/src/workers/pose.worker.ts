@@ -27,7 +27,7 @@ async function initialize(view: 'front' | 'side') {
       baseOptions: { modelAssetPath: `${origin}/vision/pose_landmarker_lite.task`, delegate },
       canvas: new OffscreenCanvas(640, 480),
       runningMode: 'VIDEO', numPoses: 2,
-      minPoseDetectionConfidence: .6, minPosePresenceConfidence: .6, minTrackingConfidence: .6,
+      minPoseDetectionConfidence: .5, minPosePresenceConfidence: .5, minTrackingConfidence: .5,
       outputSegmentationMasks: false,
     };
     return PoseLandmarker.createFromOptions(files, options);

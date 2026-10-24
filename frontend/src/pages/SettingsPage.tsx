@@ -178,12 +178,12 @@ function PreferencesForm({ state }: { state: DeskState }) {
             <p className="mt-5 text-xs leading-relaxed text-stone-400">Without cloud AI, your session statistics and local rule-based summaries remain available.</p>
           </SettingsSection>
           <DeskControls key={state.mode} actuators={state.actuators} mode={state.mode} />
-          <SettingsSection title="Camera calibration" description="Sit upright at your usual distance, with your head, shoulders and hips visible.">
-            <p className="mb-4 text-xs leading-relaxed text-stone-500">For the PC demo, open the camera lab, choose Front or Side, start the camera and select Calibrate upright posture. The neutral baseline stays in browser memory.</p>
+          <SettingsSection title="Camera calibration" description="Sit upright at your usual distance with your head and shoulders visible. Hips are optional for the front PC webcam.">
+            <p className="mb-4 text-xs leading-relaxed text-stone-500">For the PC demo, open the camera lab, choose Front or Side, start the camera and select Calibrate upright posture. Hold still until calibration completes. Front view supports an upper-body frame at a desk; a side view benefits from a visible shoulder and hip. The neutral baseline stays in browser memory.</p>
             <a href="#/overview" className="mb-5 inline-flex text-xs font-semibold text-pine underline underline-offset-4">Open PC camera lab</a>
             <p className="mb-2 text-xs text-stone-500">For the Raspberry Pi hardware gateway:</p>
             <code className="block overflow-x-auto rounded-xl bg-stone-900 p-4 text-xs leading-relaxed text-stone-100">python -m raspberry_pi.gateway --calibrate --preview</code>
-            <p className="mt-4 text-xs leading-relaxed text-stone-400">Moving the camera changes pose geometry. Recalibrate after changing its position.</p>
+            <p className="mt-4 text-xs leading-relaxed text-stone-400">Recalibrate after changing camera position, view or your normal seating position. Front-view forward lean and slouch use relative size and head/shoulder geometry; they do not measure absolute depth or spine curvature.</p>
           </SettingsSection>
           <div className="flex items-start gap-3 px-2 py-1 text-xs leading-relaxed text-stone-500"><LockKeyhole className="mt-0.5 size-4 shrink-0 text-emerald-700" /><p>These settings are stored locally and applied by the same decision engine in both demo and hardware modes.</p></div>
         </div>

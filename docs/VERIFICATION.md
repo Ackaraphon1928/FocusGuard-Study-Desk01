@@ -2,7 +2,22 @@
 
 Checked on 24 October 2026 in the supplied Windows workspace. The current frontend is React / TypeScript / Tailwind, built with Node.js 24 LTS and Vite.
 
-## PC camera / MediaPipe checks
+## Seated PC webcam logic correction
+
+The user's seven local screenshots reproduced the cropped-hip failure. The original independent IMAGE/0.6 extraction detected six poses, all rejected by the old hip gate; SLOUCH1 was missed by cold-start detection. Native MediaPipe 0.10.32 VIDEO/0.5 with the exact same lite model and 30 neutral warmup frames produced one pose on each of 30 repeated target frames for every image. These are repeated still-image probes, not independent video trials.
+
+| Check | Result |
+|---|---|
+| Supplied-image classifier replay | **7/7 supplied labels matched** after tuning, using the single GOOD reference for calibration. All seven cases use upper-body tracking with out-of-frame hips. This is a tuning regression, not held-out accuracy |
+| Frontend suite | **154 tests passed** in 12 files, including 53 geometry/calibration tests and 25 supplied-image/variation/provenance checks |
+| Backend suite | **76 tests passed**; the allowlisted camera/server boundary is unchanged |
+| Extra regression cases | Mirroring, one-pixel jitter, uniform size-only changes, optional hip visibility transitions, moderately uncertain edge shoulders, missing core points and brief/sustained calibration interruptions |
+| Production build | Strict TypeScript and Vite build passed; the updated classic worker includes front upper-body logic and 0.5 MediaPipe tracking defaults |
+| Updated served worker | Ports 8000 and 5173 both served the same **147,921-byte** compiled worker, SHA256 `7f83b4f129c03b14d11bd502b0cc101bd9bdd82bcd20ae4278b01e71d529d1c2`; classic parsing passed, dataset hashes were absent from app bundles, and production image/fixture URLs returned 404 |
+
+Actual dataset points, image/model hashes, extraction settings and limitations are recorded in [the local tuning workflow](../evaluation/pc_dataset.md). Run `npm --prefix frontend run evaluate:posture` for a fresh report with per-image predictions, geometry and confusion counts. The native CPU extraction validates real MediaPipe output on the supplied screenshots. A new live browser GPU/webcam pass is still required; tests and replay do not establish generalization to unseen people or real-time transitions.
+
+## Initial PC camera / MediaPipe checks
 
 The browser-camera implementation was checked after the React migration on the same date:
 

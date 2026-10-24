@@ -35,7 +35,7 @@ For frontend development, keep the API running at port 8000 and run `npm --prefi
 5. Inspect trends, the posture timeline, and warning heatmap in **Analytics**. Download timestamped CSV data with **Export data**.
 6. Tune thresholds, weights, reminders, and lamp/fan overrides in **Rules & settings**. Cloud summaries are opt-in. Fast demo timing persists until you change it.
 
-The desk illustration displays a categorical posture state. For a real webcam demo on this PC, use **Overview → PC camera · pose lab → Start PC camera**, choose Front/Side and **Calibrate upright posture**. MediaPipe runs locally in a browser worker with a skeleton overlay and posture labels. The remaining demo sensors stay simulated. **Stop camera** releases the camera; **Use simulated vision** explicitly restores generated posture input. See the [PC camera guide](docs/PC_CAMERA.md) for setup, privacy, calibration and limitations. Pi camera preview remains available through the hardware adapter.
+The desk illustration displays a categorical posture state. For a real webcam demo on this PC, use **Overview → PC camera · pose lab → Start PC camera**, choose Front/Side and **Calibrate upright posture**. Front webcam tracking needs a reliable head and both shoulders; hips may stay behind the desk. MediaPipe runs locally in a browser worker with a skeleton overlay, posture labels and tracking diagnostics. The remaining demo sensors stay simulated. **Stop camera** releases the camera; **Use simulated vision** explicitly restores generated posture input. See the [PC camera guide](docs/PC_CAMERA.md) for setup, privacy, calibration and limitations. Pi camera preview remains available through the hardware adapter.
 
 ## Technology choices
 
