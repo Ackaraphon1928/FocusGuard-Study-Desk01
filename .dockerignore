@@ -12,5 +12,9 @@ infrastructure/secrets
 raspberry_pi/models
 evaluation/results
 .tools
+**/node_modules
+frontend/dist
+**/*.tsbuildinfo
+**/coverage
 *.pdf
 *.sqlite3*

@@ -17,7 +17,7 @@ flowchart LR
     G -->|Applied-state acknowledgement| M
     F -->|Background buffered writes| I[InfluxDB v2]
     I --> R[Grafana]
-    F <--> D[Browser dashboard\nHTTP API / metadata only]
+    F <--> D[React + TypeScript + Tailwind dashboard\nHTTP / WebSocket metadata only]
     F -->|Opt-in session aggregates| AI[AWS Bedrock]
     AI -->|Interpretation only| F
 ```
@@ -26,7 +26,7 @@ flowchart LR
 
 FastAPI keeps the decision engine, hardware adapters, evaluation, and optional AI integration in Python. A deterministic engine with an injected clock makes time-based behavior testable without sleeping or connecting devices. It also makes decisions easier to explain than a trained condition classifier. MediaPipe is used only for pretrained pose extraction; calibrated geometry determines posture.
 
-The browser uses native JavaScript modules and SVG rather than a build framework. That keeps the dashboard immediately runnable on the available Python-only workstation and easy to serve from a Pi. Its data source is the API, not an embedded canned dataset. Session history and charts accumulate from actual simulator or hardware inputs after startup.
+The browser uses React 19 with strict TypeScript 6, Tailwind CSS 4, React Router 7, TanStack Query 5, Recharts 3, and React Hook Form with Zod. Node.js 24 LTS and Vite 8 build the dashboard; exact package versions and an npm lockfile make installation reproducible. Vite proxies REST and WebSocket traffic during development while preserving the API's same-origin checks. Production FastAPI serves only the compiled `frontend/dist/` directory, which is built in a separate Node stage in Docker. Its data source is the API, not an embedded canned dataset. Session history and charts accumulate from actual simulator or hardware inputs after startup.
 
 SQLite supplies durable local history when no additional services are running. The full deployment mirrors typed conditions and system events into InfluxDB for the required time-series/Grafana architecture. Influx writes and cloud requests run outside the control loop. SQLite remains available when those integrations are offline; the bounded Influx retry queue reports pending/dropped counts rather than hiding an outage.
 

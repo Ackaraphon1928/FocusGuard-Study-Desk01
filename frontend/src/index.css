@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --color-canvas: #f6f7f3;
+  --color-ink: #293c31;
+  --color-muted: #7b8878;
+  --color-pine: #245e46;
+  --color-pine-dark: #194b3b;
+  --color-sage: #91a978;
+  --color-sage-light: #eef3e8;
+  --color-lime: #c7e1a4;
+  --color-line: #e5eade;
+}
+
+@layer base {
+  body { @apply m-0 min-w-80 bg-canvas font-sans text-ink antialiased; }
+  button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+  button:not(:disabled), select { cursor: pointer; }
+  :focus-visible { @apply outline-2 outline-offset-4 outline-sage; }
+  input, select { accent-color: var(--color-pine); }
+  dialog:not([open]) { display: none; }
+  ::selection { @apply bg-lime text-pine-dark; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

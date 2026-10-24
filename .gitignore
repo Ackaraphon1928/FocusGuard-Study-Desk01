@@ -21,3 +21,7 @@ evaluation/capture*.csv
 .pio/
 *.log
 .tools/
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+coverage/

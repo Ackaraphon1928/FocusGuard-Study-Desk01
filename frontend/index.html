@@ -1,43 +1,15 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#174a3a">
-  <meta name="description" content="FocusGuard: a private, local-first companion for a better study environment.">
-  <title>FocusGuard · Your desk, in balance</title>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css">
-  <script src="/app.js" type="module"></script>
-</head>
-<body>
-  <a class="skip-link" href="#main">Skip to content</a>
-  <aside class="sidebar" id="sidebar">
-    <a class="brand" href="#overview" aria-label="FocusGuard home"><span class="brand-mark" data-icon="leaf"></span><span>focusguard<span class="brand-dot">.</span><small>A LITTLE MORE BALANCE</small></span></a>
-    <div class="workspace"><span class="workspace-icon" data-icon="desk"></span><div>My study space<small>Personal workspace</small></div><span class="tiny-dot"></span></div>
-    <div class="nav-label">WORKSPACE</div>
-    <nav aria-label="Main navigation">
-      <a href="#overview" data-page="overview"><span data-icon="grid"></span>Overview</a>
-      <a href="#sessions" data-page="sessions"><span data-icon="clock"></span>Session history</a>
-      <a href="#analytics" data-page="analytics"><span data-icon="chart"></span>Analytics</a>
-      <a href="#devices" data-page="devices"><span data-icon="cpu"></span>Devices & network</a>
-      <div class="nav-label nav-label-spaced">PREFERENCES</div>
-      <a href="#settings" data-page="settings"><span data-icon="sliders"></span>Rules & settings</a>
-    </nav>
-    <div class="sidebar-bottom"><div class="privacy-note"><span data-icon="shield"></span><strong>Designed for your privacy</strong><p>Your camera stays local.<br>Only insights leave your desk.</p><button class="text-button" id="privacy-button">How it works <span data-icon="arrow-right"></span></button></div><div class="profile"><div class="avatar">Y</div><div>Your workspace<small>FocusGuard prototype</small></div><span class="version">v1.0</span></div></div>
-  </aside>
-  <div class="app-shell">
-    <header class="topbar"><div class="breadcrumb"><button class="icon-button mobile-menu" id="menu-button" aria-label="Toggle navigation"><span data-icon="menu"></span></button><span>Workspace</span><span class="crumb-slash">/</span><strong id="breadcrumb-page">Overview</strong></div><div class="topbar-actions"><span class="local-badge"><span class="tiny-dot"></span>Local-first</span><button class="icon-button" id="notifications-button" aria-label="View recent events"><span data-icon="bell"></span><span id="notification-dot" class="notification-dot" hidden></span></button><div class="avatar small">Y</div></div></header>
-    <main id="main" tabindex="-1">
-      <div id="connection-banner" class="connection-banner" role="status" hidden>Reconnecting to your desk. Your last readings are shown below.</div>
-      <div class="page-heading"><div><div class="eyebrow" id="page-eyebrow">YOUR SPACE. YOUR PACE.</div><h1 id="page-title">A good space for good work.</h1><p id="page-description">A little awareness goes a long way. Here’s how your desk is doing.</p></div><div class="page-actions"><span class="date-label" id="today"></span><button class="button secondary" id="export-button"><span data-icon="download"></span>Export data</button></div></div>
-      <div class="demo-banner" id="demo-banner"><div class="demo-banner-copy"><span class="demo-symbol" data-icon="flask"></span><div><strong>You’re exploring the demo workspace</strong><span>Live simulated sensors. Real rules, sessions, and insights.</span></div></div><button class="button small-button" id="demo-lab-button">Try a scenario <span data-icon="arrow-right"></span></button></div>
-      <div id="page-content" aria-live="off"><div class="loading-state"><span class="loading-spinner"></span><h2>Connecting to your study space</h2><p>Getting the latest readings from FocusGuard.</p></div></div>
-      <footer class="page-footer"><span><span class="tiny-dot"></span><span id="footer-status">Connecting to local service</span></span><span>Thoughtful technology. A better study space.</span></footer>
-    </main>
-  </div>
-  <dialog id="demo-dialog" class="drawer-dialog"><form method="dialog" class="dialog-heading"><div><div class="eyebrow">A HANDS-ON LOOK</div><h2>The demo lab</h2></div><button class="icon-button" aria-label="Close demo lab"><span data-icon="x"></span></button></form><p class="dialog-intro">Change the conditions at your virtual desk and watch FocusGuard respond. No hardware needed.</p><div id="scenario-list" class="scenario-list"></div><div id="demo-rule-status" class="rule-status" aria-live="polite"></div><div class="demo-preset"><div><strong>Presentation timing</strong><p>Shorter warning delays and a 30-second break interval, so you can see the whole system in action.</p></div><button class="button secondary" id="fast-demo-button">Enable fast rules</button></div><div class="inline-note"><span data-icon="info"></span><p>Demo values are simulated, including vision confidence and FPS. Physical devices are never controlled in demo mode.</p></div></dialog>
-  <dialog id="detail-dialog" class="detail-dialog"><div id="detail-content"></div></dialog>
-  <div class="toast" id="toast" role="status" hidden></div>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#194b3b" />
+    <meta name="description" content="FocusGuard: a private, local-first companion for a better study environment." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>FocusGuard · Your desk, in balance</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>

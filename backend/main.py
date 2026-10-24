@@ -11,7 +11,7 @@ import time
 from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 
@@ -113,7 +113,7 @@ class Runtime:
             await asyncio.sleep(.25)
 
 
-def create_app(db_path=None, mode=None, background=True):
+def create_app(db_path=None, mode=None, background=True, frontend_dir=None):
     @asynccontextmanager
     async def lifespan(application):
         runtime = Runtime(db_path, mode)
@@ -278,9 +278,23 @@ def create_app(db_path=None, mode=None, background=True):
         except (WebSocketDisconnect, RuntimeError):
             pass
 
-    frontend = ROOT / "frontend"
-    if frontend.exists():
+    frontend = Path(frontend_dir) if frontend_dir is not None else ROOT / "frontend" / "dist"
+    if (frontend / "index.html").is_file():
         application.mount("/", StaticFiles(directory=frontend, html=True), name="dashboard")
+    else:
+        @application.get("/", response_class=HTMLResponse, include_in_schema=False)
+        async def frontend_not_built():
+            return HTMLResponse(
+                "<!doctype html><html lang='en'><meta charset='utf-8'>"
+                "<title>FocusGuard: build the frontend</title>"
+                "<body><h1>FocusGuard frontend needs a build</h1>"
+                "<p>Run <code>.\\start.ps1 -Install</code> from the project root, "
+                "or use Node.js 24 LTS and run <code>cd frontend</code>, "
+                "<code>npm ci</code>, then <code>npm run build</code>. "
+                "Restart the API after building.</p>"
+                "<p>The API remains available at <a href='/docs'>/docs</a>.</p></body></html>",
+                status_code=503,
+            )
     return application
 
 

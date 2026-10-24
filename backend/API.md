@@ -2,7 +2,7 @@
 
 The backend runs on Python 3.11+ (verified here on Python 3.13) with FastAPI,
 SQLite, Paho MQTT and optional AWS Bedrock. The dashboard is served at `/` from
-`frontend/`; interactive API documentation is at `/docs`. No Node build is needed.
+`frontend/dist/`; interactive API documentation is at `/docs`. Build the React frontend with Node.js 24 LTS and `npm --prefix frontend ci` followed by `npm --prefix frontend run build`, or use `.\start.ps1 -Install`. If compiled assets are missing, `/` returns HTTP 503 with build instructions; the API remains available.
 
 ```powershell
 python -m venv .venv

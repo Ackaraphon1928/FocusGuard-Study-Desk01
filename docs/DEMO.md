@@ -5,12 +5,10 @@
 From the repository root in PowerShell:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
-.\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+.\start.ps1 -Install
 ```
 
-Open <http://127.0.0.1:8000>. The root `start.ps1` script is a convenient alternative when provided. The frontend is served by FastAPI and does not require a Node.js build. The default local store persists timestamped data and sessions between restarts. Use `FOCUSGUARD_DB` to choose a separate database for a clean demonstration instead of deleting a working dataset.
+Install Node.js 24 LTS (24.15 or newer) and Python 3.11 or newer first. Open <http://127.0.0.1:8000>. The launcher installs dependencies, builds the React/TypeScript/Tailwind frontend with Vite, and starts FastAPI, which serves the compiled assets. Subsequent starts use `.\start.ps1`; changed frontend sources rebuild automatically. See [frontend/README.md](../frontend/README.md) for manual setup and Vite development mode. The default local store persists timestamped data and sessions between restarts. Use `FOCUSGUARD_DB` to choose a separate database for a clean demonstration instead of deleting a working dataset.
 
 The dashboard starts in clearly labeled **demo** mode. Its sensor readings and pose illustration are synthetic. The illustration is not a camera stream or evidence that a vision model ran. Real vision is a separate local camera process; keep its preview on the Raspberry Pi.
 

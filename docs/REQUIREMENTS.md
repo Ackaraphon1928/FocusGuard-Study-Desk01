@@ -65,7 +65,7 @@ The design's face-free identity/card flow, mobile push notifications, advanced l
 | Durable local readings, sessions, settings, events | [backend/storage.py](../backend/storage.py) | Engine restart/persistence tests and API history/export tests |
 | HTTP API, validation, WebSocket, CSV | [backend/main.py](../backend/main.py) | [tests/test_api.py](../tests/test_api.py) |
 | MQTT, InfluxDB, AWS Bedrock fallback | [backend/integrations.py](../backend/integrations.py) | [tests/test_integrations.py](../tests/test_integrations.py) checks mode isolation, forwarding, and line protocol; API tests mock the summary boundary. Live services still require deployment checks. |
-| User dashboard and simulator controls | [frontend/](../frontend/) | Same-origin HTTP smoke check; interactive review is separate from Python tests |
+| React / TypeScript / Tailwind dashboard and simulator controls | [frontend/](../frontend/) | TypeScript, ESLint, Vitest / React Testing Library, production build and same-origin HTTP checks; visual browser review is separate |
 | ESP32 sensor nodes | [esp32/node_a/](../esp32/node_a/), [esp32/node_b/](../esp32/node_b/) | PlatformIO compilation and physical bring-up required |
 | Local pose and actuator guards | [raspberry_pi/](../raspberry_pi/) | [tests/test_gateway.py](../tests/test_gateway.py) checks pure debounce/calibration/expiry logic without importing GPIO or a model |
 | Broker, InfluxDB, Grafana deployment | [infrastructure/compose.yaml](../infrastructure/compose.yaml) | Docker startup and live data queries required on the deployment host |

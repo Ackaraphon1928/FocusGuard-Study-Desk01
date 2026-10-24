@@ -6,21 +6,25 @@ The application runs immediately with a sensor simulator. The same decision engi
 
 ## Run it
 
-Python 3.11 or newer is required for the dashboard/backend. From this folder in PowerShell:
+Install **Node.js 24 LTS (24.15 or newer)** and **Python 3.11 or newer**. From this folder in PowerShell:
 
 ```powershell
 .\start.ps1 -Install
 ```
 
-Open **[http://127.0.0.1:8000](http://127.0.0.1:8000)**. Subsequent starts need only ` .\start.ps1`. If your PowerShell policy prevents running scripts, use:
+Open **[http://127.0.0.1:8000](http://127.0.0.1:8000)**. The launcher installs locked frontend dependencies, builds React, and starts the local API. Subsequent starts need only ` .\start.ps1`; changed frontend sources rebuild automatically. Force a rebuild with ` .\start.ps1 -Build`. If your PowerShell policy prevents running scripts, use:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r backend/requirements.txt
+npm.cmd --prefix frontend ci
+npm.cmd --prefix frontend run build
 .\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-On Linux/macOS, use `.venv/bin/python` in place of `.venv\Scripts\python.exe`. Press Ctrl+C to stop. The demo does not require Docker, a broker, hardware, Node.js, or cloud credentials. Sessions, settings, events, and timestamped readings persist in the ignored `backend/data/` SQLite database. Set `FOCUSGUARD_DB` to use a different local database. An exact dependency snapshot for the verified Windows/Python 3.13 environment is in `backend/requirements.lock.txt`; the main requirements file supports platform-appropriate dependency resolution.
+On Linux/macOS, use `.venv/bin/python` in place of `.venv\Scripts\python.exe`. Press Ctrl+C to stop. Node.js builds the frontend; the compiled dashboard is served by FastAPI at runtime. The demo does not require Docker, a broker, hardware, or cloud credentials. Sessions, settings, events, and timestamped readings persist in the ignored `backend/data/` SQLite database. Set `FOCUSGUARD_DB` to use a different local database. An exact backend dependency snapshot for the verified Windows/Python 3.13 environment is in `backend/requirements.lock.txt`; the main requirements file supports platform-appropriate dependency resolution.
+
+For frontend development, keep the API running at port 8000 and run `npm --prefix frontend run dev` in another terminal. Open **[http://127.0.0.1:5173](http://127.0.0.1:5173)** for Vite hot reload. REST and WebSocket requests use the same-origin Vite proxy. See [frontend/README.md](frontend/README.md) for build, development, and quality-check commands.
 
 ## Try the complete flow
 
@@ -37,7 +41,10 @@ The desk illustration displays a categorical posture state; it is explicitly **n
 
 | Layer | Implementation | Purpose |
 |---|---|---|
-| Dashboard | HTML, CSS, native JavaScript modules, SVG charts | Responsive interface, no frontend build or third-party runtime required |
+| Dashboard | React 19, strict TypeScript 6, Tailwind CSS 4 | Typed component-based interface and responsive styling |
+| Frontend tooling | Node.js 24 LTS, npm lockfile, Vite 8, ESLint | Reproducible builds, hot reload, static analysis |
+| Frontend data and forms | TanStack Query 5, React Router 7, React Hook Form + Zod | Server-state caching, live updates, navigation and validated settings |
+| Charts and UI | Recharts 3, Lucide React | Time-series charts and consistent icons |
 | Local service | Python, FastAPI, Pydantic, Uvicorn | Validated HTTP API, WebSocket feed, deterministic decision engine |
 | Local journal | SQLite with timestamped records | Zero-service demo, settings/sessions/history persistence |
 | IoT transport | Mosquitto MQTT 3.1.1, Paho, PubSubClient | Distributed sensor metadata, events, configuration, expiring actuator commands |
@@ -47,7 +54,7 @@ The desk illustration displays a categorical posture state; it is explicitly **n
 | Optional AI | AWS Bedrock Converse via boto3 | Aggregate-only session interpretation, with local fallback |
 | Evaluation | Standard-library Python CLI + unittest | Classification metrics, FPS, distance MAE, latency analysis |
 
-FastAPI replaces the document's optional Node-RED layer. The dedicated dashboard supplements Grafana. SQLite makes the standalone demo practical; the Docker stack enables InfluxDB and Grafana for the integrated IoT prototype. Lifecycle and storage integration follow the [FastAPI documentation](https://fastapi.tiangolo.com/advanced/events/) and [InfluxDB v2 write API](https://docs.influxdata.com/influxdb/v2/api/write/).
+Node.js provides the standard frontend development and build runtime. FastAPI keeps the rules, sensor integration, and hardware-facing API in Python alongside the Raspberry Pi code, and replaces the document's optional Node-RED layer. The dedicated React dashboard supplements Grafana. SQLite makes the standalone demo practical; the Docker stack enables InfluxDB and Grafana for the integrated IoT prototype. The production API exposes only `frontend/dist/`; a missing build returns setup instructions with HTTP 503. Docker builds the frontend in a Node stage and copies only compiled assets into the Python runtime image.
 
 ## Hardware and full local stack
 
@@ -88,11 +95,15 @@ The Study Condition Score is a configurable engineering heuristic, not a clinica
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 .\.venv\Scripts\python.exe -m compileall -q backend raspberry_pi evaluation infrastructure
+npm --prefix frontend run typecheck
+npm --prefix frontend run lint
+npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
 Tests exercise rule timing, cooldowns, occupancy, staleness, sensor fusion, break/session accounting, persistence, controls, input validation, privacy boundaries, AI failure, and pure gateway logic. They use isolated stores and controlled time.
 
-The delivered version passes **54 software tests** and both ESP32 firmware builds. See the **[verification record](docs/VERIFICATION.md)** for the exact checks and limits, including the unavailable browser and stopped Docker engine.
+See the **[verification record](docs/VERIFICATION.md)** for the software checks and their limits. React behavior tests use Vitest, React Testing Library, and jsdom; Python tests cover backend and hardware-adapter behavior. Browser layout, real services, and physical hardware require separate validation.
 
 Use **[evaluation/README.md](evaluation/README.md)** to collect and report real data. Its CLI computes posture precision/recall/F1/confusion matrix, observed FPS, ToF MAE, and latency statistics. The included CSV is marked synthetic and requires an explicit flag; it does not represent measured performance.
 
@@ -101,7 +112,7 @@ The software demo and integrations are implemented. Physical sensor accuracy, Ra
 ## Project map
 
 ```text
-frontend/           Dashboard, illustrations, charts, controls
+frontend/           React / TypeScript / Tailwind dashboard, Node build, component tests
 backend/            API, decision engine, persistence, MQTT/Influx/Bedrock adapters
 esp32/              Node A and B firmware + shared configuration
 raspberry_pi/       Local camera model, calibration, I2C sensors, GPIO outputs

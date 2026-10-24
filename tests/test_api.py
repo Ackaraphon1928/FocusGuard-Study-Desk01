@@ -3,6 +3,8 @@
 import csv
 import io
 import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import Mock, patch
 
@@ -21,12 +23,17 @@ class ApiTests(unittest.TestCase):
         self.env.start()
         self.clock = patch("backend.main.time.time", side_effect=lambda: self.now)
         self.clock.start()
-        self.app = create_app(db_path=":memory:", mode="hardware", background=False)
+        self.frontend = TemporaryDirectory()
+        (Path(self.frontend.name) / "index.html").write_text(
+            "<!doctype html><title>FocusGuard</title><div id='root'></div>", encoding="utf-8"
+        )
+        self.app = create_app(db_path=":memory:", mode="hardware", background=False, frontend_dir=self.frontend.name)
         self.client = TestClient(self.app).__enter__()
         self.runtime = self.app.state.runtime
 
     def tearDown(self):
         self.client.__exit__(None, None, None)
+        self.frontend.cleanup()
         self.clock.stop()
         self.env.stop()
 
@@ -48,6 +55,7 @@ class ApiTests(unittest.TestCase):
         page = self.client.get("/")
         self.assertEqual(page.status_code, 200)
         self.assertIn("FocusGuard", page.text)
+        self.assertEqual(self.client.get("/src/main.tsx").status_code, 404)
         state = self.client.get("/api/state")
         self.assertEqual(state.status_code, 200)
         self.assertEqual(state.headers["cache-control"], "no-store")
@@ -55,6 +63,16 @@ class ApiTests(unittest.TestCase):
         self.assertIsNone(state.json()["score"]["total"])
         with self.client.websocket_connect("/api/live", headers={"origin": "http://testserver"}) as socket:
             self.assertEqual(socket.receive_json()["mode"], "hardware")
+
+    def test_missing_frontend_build_is_actionable_and_does_not_expose_sources(self):
+        app = create_app(db_path=":memory:", mode="hardware", background=False,
+                         frontend_dir=Path(self.frontend.name) / "missing-dist")
+        with TestClient(app) as client:
+            page = client.get("/")
+            self.assertEqual(page.status_code, 503)
+            self.assertIn("npm run build", page.text)
+            self.assertEqual(client.get("/src/main.tsx").status_code, 404)
+            self.assertEqual(client.get("/api/state").status_code, 200)
 
     def test_telemetry_reaches_rules_history_and_saved_session(self):
         self.client.patch("/api/settings", json={"posture_warning_seconds": 1})
