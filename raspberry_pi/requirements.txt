@@ -1,0 +1,12 @@
+# Raspberry Pi OS Bookworm 64-bit, Python 3.11. Later releases checked
+# (0.10.21 and 0.10.32) lack this aarch64 wheel; verify before upgrading.
+mediapipe==0.10.18
+numpy==1.26.4
+opencv-contrib-python==4.10.0.84
+paho-mqtt==2.1.0
+python-dotenv==1.0.1
+Adafruit-Blinka==9.2.0
+adafruit-circuitpython-bme280==2.6.32
+adafruit-circuitpython-bh1750==1.1.19
+gpiozero==2.0.1
+lgpio==0.2.2.0; platform_system == "Linux"

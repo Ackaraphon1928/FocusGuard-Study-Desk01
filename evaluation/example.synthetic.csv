@@ -1,0 +1,6 @@
+provenance,expected_posture,predicted_posture,distance_reference_cm,distance_cm,latency_ms,frame_timestamp,inference_ms
+synthetic,GOOD,GOOD,50,51,80,0.00,30
+synthetic,SLOUCH,SLOUCH,40,39,90,0.05,32
+synthetic,LEAN_FORWARD,SLOUCH,30,32,110,0.10,35
+synthetic,LEAN_LEFT_RIGHT,LEAN_LEFT_RIGHT,60,59,85,0.15,31
+synthetic,NO_PERSON,NO_PERSON,,,,0.20,29

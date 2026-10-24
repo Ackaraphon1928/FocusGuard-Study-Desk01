@@ -1,0 +1,505 @@
+{
+  "uid": "focusguard-desk",
+  "title": "FocusGuard \u00c2\u00b7 desk conditions",
+  "description": "Local IoT observations. Select demo for simulated UI data or hardware for measured MQTT input. Missing observations remain gaps.",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "5s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "tags": [
+    "focusguard",
+    "privacy-aware",
+    "iot"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "mode",
+        "label": "Data mode",
+        "type": "custom",
+        "query": "hardware,demo",
+        "current": {
+          "text": "hardware",
+          "value": "hardware"
+        },
+        "options": [
+          {
+            "text": "hardware",
+            "value": "hardware",
+            "selected": true
+          },
+          {
+            "text": "demo",
+            "value": "demo",
+            "selected": false
+          }
+        ]
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Study condition score ($mode)",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "focusguard-influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"focusguard\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"desk_conditions\" and r.mode == \"${mode}\" and r._field == \"score\") |> last()"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 60
+              },
+              {
+                "color": "green",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Latest detected posture ($mode)",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "focusguard-influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"focusguard\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"desk_conditions\" and r.mode == \"${mode}\" and r._field == \"posture\") |> last()"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Local vision FPS ($mode)",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "focusguard-influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"focusguard\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"desk_conditions\" and r.mode == \"${mode}\" and r._field == \"fps\") |> last()"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "fps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "ToF distance \u00c2\u00b7 not eye-to-screen ($mode)",
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "focusguard-influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"focusguard\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"desk_conditions\" and r.mode == \"${mode}\" and r._field == \"distance_cm\") |> last()"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "unit": "lengthcm"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Study condition score history ($mode)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "focusguard-influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"focusguard\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"desk_conditions\" and r.mode == \"${mode}\" and r._field == \"score\") |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Ambient illumination ($mode)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "focusguard-influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"focusguard\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"desk_conditions\" and r.mode == \"${mode}\" and r._field == \"lux\") |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "lux",
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Temperature and humidity ($mode)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "focusguard-influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"focusguard\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"desk_conditions\" and r.mode == \"${mode}\" and (r._field == \"temperature_c\" or r._field == \"humidity_percent\")) |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "temperature_c"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "celsius"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "humidity_percent"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Relative noise \u00c2\u00b7 not dB ($mode)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "focusguard-influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"focusguard\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"desk_conditions\" and r.mode == \"${mode}\" and r._field == \"noise_level\") |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Lamp command brightness ($mode)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "focusguard-influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"focusguard\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"desk_conditions\" and r.mode == \"${mode}\" and r._field == \"lamp_percent\") |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: true)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "type": "state-timeline",
+      "title": "Fan / buzzer commands ($mode)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "focusguard-influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"focusguard\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"desk_conditions\" and r.mode == \"${mode}\" and (r._field == \"fan\" or r._field == \"buzzer\")) |> map(fn: (r) => ({r with _value: if r._value then 1.0 else 0.0})) |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: true)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "spanNulls": false
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "OFF",
+                  "color": "blue"
+                },
+                "1": {
+                  "text": "ON",
+                  "color": "orange"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "auto"
+      }
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Warning and session event history ($mode)",
+      "gridPos": {
+        "h": 9,
+        "w": 18,
+        "x": 0,
+        "y": 29
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "focusguard-influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"focusguard\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"desk_events\" and r.mode == \"${mode}\") |> pivot(rowKey: [\"_time\", \"event_type\", \"severity\"], columnKey: [\"_field\"], valueColumn: \"_value\") |> keep(columns: [\"_time\", \"event_type\", \"severity\", \"message\", \"session_id\"]) |> group() |> sort(columns: [\"_time\"], desc: true) |> limit(n: 200)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Events in selected time range ($mode)",
+      "gridPos": {
+        "h": 9,
+        "w": 6,
+        "x": 18,
+        "y": 29
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "focusguard-influx"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "query": "from(bucket: \"focusguard\") |> range(start: v.timeRangeStart, stop: v.timeRangeStop) |> filter(fn: (r) => r._measurement == \"desk_events\" and r.mode == \"${mode}\" and r._field == \"message\") |> group() |> count()"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      }
+    }
+  ]
+}

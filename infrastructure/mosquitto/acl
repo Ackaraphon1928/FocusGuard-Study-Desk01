@@ -1,0 +1,16 @@
+user gateway
+topic write focusguard/gateway/#
+topic read focusguard/actuator
+topic read focusguard/config
+
+user nodeA
+topic write focusguard/nodeA/#
+
+user nodeB
+topic write focusguard/nodeB/#
+
+user backend
+topic read focusguard/#
+topic write focusguard/actuator
+topic write focusguard/config
+topic write focusguard/system/#

@@ -1,0 +1,32 @@
+# Exact backend dependency closure verified on Python 3.13, Windows x64.
+# Includes uvicorn standard extras; ESP32/vision tools use separate environments.
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+boto3==1.43.118
+botocore==1.43.118
+certifi==2026.10.23
+click==8.5.0
+fastapi==0.162.0
+h11==0.16.0
+httpcore==1.0.9
+httptools==0.9.0
+httpx==0.28.1
+idna==3.20
+jmespath==1.1.0
+opentelemetry-api==1.45.1
+paho-mqtt==2.1.0
+pydantic==2.14.1
+pydantic_core==2.50.1
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.4
+PyYAML==6.0.3
+s3transfer==0.19.3
+six==1.17.0
+starlette==1.9.0
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+urllib3==2.8.0
+uvicorn==0.54.0
+watchfiles==1.3.0
+websockets==17.3

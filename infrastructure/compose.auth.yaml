@@ -1,0 +1,6 @@
+services:
+  mosquitto:
+    volumes:
+      - ./mosquitto/mosquitto.auth.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./secrets/mosquitto-passwords:/mosquitto/config/passwords:ro
+      - ./mosquitto/acl:/mosquitto/config/acl:ro

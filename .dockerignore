@@ -1,0 +1,16 @@
+.git
+.venv
+.venv-pio
+.venv-pi
+esp32/.platformio
+**/.pio
+**/__pycache__
+**/.env
+**/config.h
+backend/data
+infrastructure/secrets
+raspberry_pi/models
+evaluation/results
+.tools
+*.pdf
+*.sqlite3*
