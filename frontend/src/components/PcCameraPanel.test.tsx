@@ -129,6 +129,66 @@ describe('Python camera controls and monitoring', () => {
     expect(calls('/vision/status').length).toBeGreaterThan(1);
   });
 
+  it.each(['world', 'normalized'] as const)('displays Python %s neck evidence and foreground selection without deriving posture in the browser', async (source) => {
+    const observed = observation();
+    observed.people = 2;
+    observed.result.subject = { index: 1, ambiguous: false, detected: 2, reason: 'dominant_foreground' };
+    observed.result.geometry!.upperBody = {
+      shoulderSpanRatio: .45, faceSpanRatio: .18, faceReference: 'ears',
+      headHeightRatio: .4, headOffsetRatio: 0, shoulderAngleDeg: 0,
+      headRollDeg: 0, headPitchRatio: .2, facePitchRatio: .5, confidence: .95,
+      neckDepthSource: source, neckDepthRatio: .5, neckHeightRatio3d: .35, neckInclinationDeg: 54.64,
+    };
+    currentSnapshot = { ...currentSnapshot, status: 'running', delegate: 'CPU', observation: observed };
+    renderWorkspace(<Harness />);
+    const diagnostics = await screen.findByLabelText('Python tracking diagnostics');
+    await waitFor(() => expect(diagnostics).toHaveTextContent('Neck inclination: 54.6°'));
+    expect(diagnostics).toHaveTextContent(source === 'world' ? 'World coordinates' : 'Normalized coordinates');
+    expect(diagnostics).toHaveTextContent('relative depth, not camera distance');
+    expect(diagnostics).toHaveTextContent('Detected people: 2 · Selected foreground: 2');
+    expect(diagnostics).toHaveTextContent('Candidate: GOOD');
+    expect(calls('/demo/vision')).toHaveLength(0);
+    expect(getUserMedia).not.toHaveBeenCalled();
+    expect(Worker).not.toHaveBeenCalled();
+  });
+
+  it('shows uncertain competing subjects and preserves Python UNKNOWN without depth claims', async () => {
+    const observed = observation();
+    observed.people = 2;
+    observed.result = { ...observed.result, posture: 'UNKNOWN', candidate: 'UNKNOWN', geometry: null,
+      reason: 'multiple_people', subject: { index: null, ambiguous: true, detected: 2, reason: 'unreliable_competing_subject' } };
+    currentSnapshot = { ...currentSnapshot, status: 'running', delegate: 'CPU', observation: observed };
+    renderWorkspace(<Harness />);
+    const diagnostics = await screen.findByLabelText('Python tracking diagnostics');
+    expect(diagnostics).toHaveTextContent('Detected people: 2 · Subject selection is uncertain');
+    expect(diagnostics).toHaveTextContent('Candidate: UNKNOWN');
+    expect(diagnostics).not.toHaveTextContent('Neck inclination');
+    expect(await screen.findByText(/Keep one person clearly in the foreground/)).toBeInTheDocument();
+  });
+
+  it('presents a Python head-only bow as SLOUCH without inventing shoulder or torso angles', async () => {
+    const observed = observation();
+    observed.result = { ...observed.result, posture: 'SLOUCH', candidate: 'SLOUCH', reason: 'tracking_head_bow',
+      geometry: { trackingMode: 'head_only', headHeightRatio: null, headOffsetRatio: null,
+        torsoAngleDeg: null, shoulderAngleDeg: null, forwardRatio: null, neckForwardRatio: null,
+        forwardSource: 'unavailable', confidence: .96,
+        headBow: { noseEarPitchRatio: .68, eyeEarPitchRatio: .37, headRollDeg: 4, confidence: .96 } } };
+    currentSnapshot = { ...currentSnapshot, status: 'running', delegate: 'CPU', observation: observed };
+    renderWorkspace(<Harness />);
+    const diagnostics = await screen.findByLabelText('Python tracking diagnostics');
+    expect(diagnostics).toHaveTextContent('Head only · pronounced bow');
+    expect(diagnostics).toHaveTextContent('Candidate: SLOUCH');
+    expect(diagnostics).not.toHaveTextContent('Full body');
+    expect(diagnostics).not.toHaveTextContent('Neck inclination');
+    expect(screen.getByText('Face landmark reliability')).toBeInTheDocument();
+    expect(screen.getByText('96%')).toBeInTheDocument();
+    expect(screen.getByText('Body angle')).toBeInTheDocument();
+    expect(screen.getByText('Unavailable')).toBeInTheDocument();
+    expect(screen.queryByText('Torso angle')).not.toBeInTheDocument();
+    expect(screen.queryByText('Shoulder tilt')).not.toBeInTheDocument();
+    expect(await screen.findByText(/this head-only path can report SLOUCH only/)).toBeInTheDocument();
+  });
+
   it('sends calibration and view controls to Python rather than applying local posture logic', async () => {
     renderWorkspace(<Harness />);
     await startRunning();

@@ -44,6 +44,8 @@ The desk illustration displays a categorical posture state. For real camera proc
 Then open **Overview → Python camera · pose lab → Start backend camera**, select the backend camera index and Front/Side, sit upright, and choose **Calibrate upright posture**. Front view supports a reliable head and both shoulders above a desk; hips are optional. Python logs posture/reason/FPS in the terminal. **Enable local debug preview** optionally streams a skeleton image without recording.
 
 For testing in Demo workspace, enable **PC camera mode** and allow browser camera permission. The browser sends frames to Python for processing and shows a local webcam preview. Calibrate this input separately. **Turn PC camera mode off** to restore the previous Python backend camera index, view, preview and numeric calibration; it resumes if previously running, or stays idle if it was idle. Permission failure or connection loss also releases PC capture and restores the prior backend selection. The remaining demo sensors stay simulated. **Use simulated vision** explicitly selects generated posture. See the [camera guide](docs/PC_CAMERA.md) for setup, debugging and Pi deployment.
+The latest edge-case rules compare the head/shoulder level and reliable upper-body Z geometry against your personal baseline, including lowered/reclined SLOUCH with an upright-looking face. Recalibrate after updating. The supplied 16 images (including nested edge-case folders) now match their filename labels in both raw and browser-JPEG tuning replay; this is not independent accuracy. See [the reproducible tuning report](evaluation/pc_dataset.md).
+
 ## Technology choices
 
 | Layer | Implementation | Purpose |

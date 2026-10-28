@@ -1,0 +1,21 @@
+{
+  "note": "Personal calibration pairing follows the supplied screenshots. edge case GOOD1/SLOUCH1 and GOOD2/SLOUCH2 show different people at different distances; cross-person baseline replay is not a distance benchmark.",
+  "references": {
+    "GOOD.png": "GOOD.png",
+    "LEAN_FORWARD.png": "GOOD.png",
+    "LEAN_FORWARD2.png": "GOOD.png",
+    "LEAN_LEFT_RIGHT.png": "GOOD.png",
+    "LEAN_LEFT_RIGHT2.png": "GOOD.png",
+    "SLOUCH1.png": "GOOD.png",
+    "SLOUCH2.png": "GOOD.png",
+    "edge case/GOOD1.png": "edge case/GOOD1.png",
+    "edge case/GOOD2.png": "edge case/GOOD2.png",
+    "edge case/SLOUCH1.png": "edge case/GOOD1.png",
+    "edge case/SLOUCH2.png": "edge case/GOOD2.png",
+    "edge case2/GOOD.png": "edge case2/GOOD.png",
+    "edge case2/SLOUCH1.png": "edge case2/GOOD.png",
+    "edge case2/SLOUCH2.png": "edge case2/GOOD.png",
+    "edge case2/SLOUCH3.png": "edge case2/GOOD.png",
+    "edge case2/SLOUCH4.png": "edge case2/GOOD.png"
+  }
+}

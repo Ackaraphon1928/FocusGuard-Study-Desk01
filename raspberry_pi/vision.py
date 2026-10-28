@@ -15,6 +15,7 @@ from threading import Event
 import time
 
 from backend.vision.posture import PostureClassifier
+from backend.vision.subject import subject_ambiguous
 
 LOGGER = logging.getLogger("focusguard.vision.pi")
 
@@ -161,20 +162,22 @@ def run_vision(mqtt, stop: Event, *, preview=False, recalibrate=False, metrics_c
                         if captured - last_log >= log_period:
                             LOGGER.warning("camera=pi event=calibration_save_failed reason=%s", error)
                 posture, geometry = result["posture"], result["geometry"] or {}
+                subject = result.get("subject", {})
                 if captured - last_publish >= period:
                     last_publish = captured
                     mqtt.publish("focusguard/gateway/vision", {
                         "vision_available": True, "person_detected": result["personDetected"],
                         "posture": posture, "confidence": round(result["confidence"], 4),
                         "fps": round(fps, 2), "inference_ms": round(inference_ms, 2),
-                        "calibrating": calibration["status"] != "ready", "ambiguous_people": people > 1,
+                        "calibrating": calibration["status"] != "ready", "ambiguous_people": subject_ambiguous(result, people),
                     })
-                log_state = (posture, result["candidate"], result["reason"], calibration["status"])
+                log_state = (posture, result["candidate"], result["reason"], calibration["status"], subject.get("reason"))
                 if log_state != last_log_state or captured - last_log >= log_period:
                     last_log, last_log_state = captured, log_state
-                    LOGGER.info("camera=pi posture=%s candidate=%s reason=%s people=%d confidence=%.3f fps=%.1f inference_ms=%.1f calibration=%s:%d/%d tracking=%s",
+                    LOGGER.info("camera=pi posture=%s candidate=%s reason=%s people=%d confidence=%.3f fps=%.1f inference_ms=%.1f calibration=%s:%d/%d tracking=%s subject=%s selection=%s",
                                 posture, result["candidate"], result["reason"], people, result["confidence"], fps, inference_ms,
-                                calibration["status"], calibration["frames"], calibration["required"], geometry.get("trackingMode", "unavailable"))
+                                calibration["status"], calibration["frames"], calibration["required"], geometry.get("trackingMode", "unavailable"), subject.get("index"), subject.get("reason", "unavailable"))
+                LOGGER.debug("camera=pi geometry=%s", geometry)
                 if writer:
                     writer.writerow({"frame_timestamp": captured, "predicted_posture": posture, "inference_ms": inference_ms,
                                      "fps": fps, "torso_angle": geometry.get("torsoAngleDeg"), "shoulder_angle": geometry.get("shoulderAngleDeg"),
@@ -185,7 +188,8 @@ def run_vision(mqtt, stop: Event, *, preview=False, recalibrate=False, metrics_c
                     links = ((7, 11), (8, 12), (11, 12), (11, 13), (13, 15), (12, 14), (14, 16),
                              (11, 23), (12, 24), (23, 24), (23, 25), (25, 27), (24, 26), (26, 28))
                     color = (100, 220, 100) if posture == "GOOD" else (0, 180, 255)
-                    for points in detected.pose_landmarks:
+                    preview_poses = ([detected.pose_landmarks[subject["index"]]] if subject.get("index") is not None else detected.pose_landmarks)
+                    for points in preview_poses:
                         visible = {i: (int(p.x * frame.shape[1]), int(p.y * frame.shape[0]))
                                    for i, p in enumerate(points) if p.visibility >= 0.55 and 0 <= p.x <= 1 and 0 <= p.y <= 1}
                         for left, right in links:

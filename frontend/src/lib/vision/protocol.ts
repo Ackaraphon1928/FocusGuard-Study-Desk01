@@ -51,7 +51,7 @@ export function trackingHint(reason: string): string {
     calibrating: 'Hold your normal upright posture while the neutral baseline is collected.',
     calibration_complete: 'Calibration complete. Keep the camera fixed and try a posture change.',
     calibration_unstable: 'Hold your normal upright posture. Movement changed the neutral samples; keep the camera fixed while calibration settles.',
-    multiple_people: 'More than one person is visible. Keep one person in the camera view.',
+    multiple_people: 'Subject selection is uncertain. Keep one person clearly in the foreground; similar-size or unreliable competing bodies produce UNKNOWN.',
     no_person: 'No person detected. Desk presence will pause after its configured grace interval.',
     cropped_pose: 'Keep your head and both shoulders inside the frame. Hips may stay behind the desk in Front view; a Side view benefits from a visible shoulder and hip.',
     unreliable_landmarks: 'Head or shoulder points are uncertain. Improve lighting and keep your face and upper body visible.',
@@ -60,6 +60,7 @@ export function trackingHint(reason: string): string {
     backward_lean_unsupported: 'This side-view heuristic does not classify leaning backward.',
     tracking_2d: 'Tracking image-plane posture. Forward depth is unavailable in this frame.',
     tracking_upper_body: 'Tracking head and shoulders; hips are optional. Forward lean and slouch use changes from your calibrated upper-body baseline.',
+    tracking_head_bow: 'Pronounced head bow detected against your upright calibration. Shoulders are unavailable; this head-only path can report SLOUCH only. Bring your shoulders back into view for other posture labels.',
     tracking: 'Tracking live pose. Sustained posture changes feed your desk reminders.',
   };
   return hints[reason] ?? 'Keep your head and shoulders visible in even lighting, and calibrate while sitting upright.';

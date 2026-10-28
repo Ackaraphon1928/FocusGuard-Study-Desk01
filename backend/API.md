@@ -141,7 +141,13 @@ The panel polls at 500 ms; inference and engine updates do not wait for a browse
 Calibration runs in Python over at least 30 reliable frames. Changing view resets
 that baseline. Confidence measures landmark reliability, not benchmark accuracy.
 
+Front upper-body geometry optionally adds `headLevelRatio`, `shoulderLevelRatio`, `neckDepthRatio`, `neckHeightRatio3d`, `neckInclinationDeg` and `neckDepthSource:world|normalized|null`. The camera-relative levels and shoulder-relative Z/Y neck geometry are compared against the same personal reference; they are not camera-distance measurements. Previously saved v1 calibrations still load but need fresh upright calibration to populate these fields. `result.subject` contains `{index,ambiguous,detected,reason}`; `observation.people` remains the raw detection count. Clear foreground selection can coexist with small/cropped background detections. Similar-size or large unreliable competing bodies remain ambiguous, and `ambiguous_people` reflects that selection uncertainty instead of simply the raw count. No coordinates are included in this selection diagnostic. See [camera logic and limits](../docs/PC_CAMERA.md).
+
 ### Browser PC-camera input and restoration
+
+When body geometry is unusable, a calibrated pronounced head bow can report SLOUCH with `trackingMode:head_only` and reason `tracking_head_bow`. `geometry.headBow` contains derived ear-line-relative face ratios and reliability, never coordinates. Body fields `headHeightRatio,headOffsetRatio,torsoAngleDeg,shoulderAngleDeg` are null. This path requires seven high-confidence face points and corroborating personal pitch changes. Its public output is SLOUCH or UNKNOWN, including while settling; a previous GOOD/forward label is not presented as head-only evidence. A saved baseline without `headBow` needs recalibration before this fallback is available.
+
+New known labels still require 600 ms of stable evidence. One uncertain crop/tracking frame always outputs UNKNOWN with zero metadata confidence. Only an already confirmed label can recover after two subsequent reliable matching frames within a bounded 300–800 ms interval from the last confirmation. Repeated uncertainty, a conflicting candidate, absence, ambiguity, calibration/reset, or timestamp discontinuity clears this recovery; it never creates a new label faster.
 
 `POST /api/vision/input` with `mode:pc_camera` is demo-only (409 in hardware workspace). It releases native capture before browser permission is requested and reserves an exclusive in-memory lease. The response contains `browserToken`; normal status/state never exposes it. `view` is optional, defaulting to the current view. Another activation returns 409 while a lease exists.
 

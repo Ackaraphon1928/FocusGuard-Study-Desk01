@@ -1,8 +1,24 @@
 ﻿# Verification record
 
-Checked on 24 October 2026 in the supplied Windows workspace. The current frontend is React / TypeScript / Tailwind, built with Node.js 24 LTS and Vite.
+Most recently checked on 28 October 2026 in the supplied Windows workspace. Earlier dated sections retain historical results. The frontend is React / TypeScript / Tailwind, built with Node.js 24 LTS and Vite.
 
-## Current PC camera demo mode with Python processing
+## Current relative-posture and edge-case correction (28 October)
+
+All posture logic remains in the shared Python classifier. Added camera-centred head/shoulder levels normalized by shoulder width; upper-body world/normalized Z with source separation; conservative foreground selection and ambiguity propagation; a strictly corroborated seven-point head-bow-only fallback; and bounded recovery of a previously stable label after one uncertain frame. The body geometry gates remain unchanged. Head-only body measurements are null, and its public label is SLOUCH or UNKNOWN.
+
+| Check | Result |
+|---|---|
+| Python behavior/integration | **338 tests passed**: existing 237 plus 59 edge/scale/depth tests, 14 subject/metadata tests, 8 evaluation tests, 12 head-bow tests and 8 recovery tests |
+| Frontend | **92 tests passed** in 10 files; strict TypeScript and production build passed. New diagnostics show the actual Z source, neck angle, foreground selection and head-only limitations |
+| Fresh fixed-observation replay | **16/16** labels for original pixels and **16/16** for a 640×480/quality-70 browser-JPEG approximation, up from **9/16** before the correction. Original seven-image fixture is unchanged and still matches **7/7** |
+| Every-native-frame probe | **16/16 final labels** from **1,920 actual CPU MediaPipe results**: fresh native instance per target, 75 neutral plus 45 target frames with 67 ms synthetic timestamps. All 16 personal baselines completed on neutral input. Real uncertain frames still abstain; this is repeated-still inference, not live-camera accuracy/FPS |
+| Adversarial checks | Personal baseline pairing, target-only distance scaling, one-pixel perturbations, reversed detection order/world association, foreground occlusion, ambiguity-to-engine propagation, unreliable/missing/source-mismatched Z, old v1 profiles, strict seven-point face quality, hidden-shoulder GOOD/forward abstention and head-only settling output |
+| Temporal checks | New labels require 600 ms. A single uncertain frame is UNKNOWN; recovery requires two matching reliable frames and a bounded deadline. Repeated/interleaved uncertainty, a conflicting candidate, absence, ambiguity, timestamp issues and reset clear the shortcut |
+| Served application | Updated `start.ps1 -Vision` startup and **10 HTTP checks passed** on port 8000, including compiled head/depth diagnostics, default idle backend selection, strict controls/origin checks and blocked source-image/fixture/Python-file URLs |
+
+The labels are filename annotations on supplied tuning images; stale GOOD overlays in screenshots are not truth. GOOD1/SLOUCH1 and GOOD2/SLOUCH2 belong to different people and use separate neutral references. The image centre approximates the camera principal point; keep camera/chair setup fixed and **recalibrate upright after this update** to populate new relative/Z/face fields. Geometric foreground selection does not establish identity. No physical webcam, Pi, GPU or new independent-person benchmark was exercised. See [the tuning workflow](../evaluation/pc_dataset.md) for exact commands and preserved intermediate reports.
+
+## Previous PC camera demo mode with Python processing (24 October)
 
 Default input remains the camera attached to the Python backend. The new Demo-only **PC camera mode** captures the browser computer's webcam and sends bounded JPEG frames to the same Python MediaPipe/classifier pipeline. Turning it off restores the prior backend camera profile, numeric calibration and running/idle state. The classifier thresholds are unchanged.
 

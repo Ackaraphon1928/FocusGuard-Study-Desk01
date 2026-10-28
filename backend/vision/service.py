@@ -15,6 +15,7 @@ from typing import Callable, Any
 from .model import ensure_model
 from .calibration import load_calibration, save_calibration
 from .posture import PostureClassifier
+from .subject import subject_ambiguous
 from .browser_frames import decode_jpeg, validate_jpeg
 
 
@@ -39,13 +40,14 @@ def _bounded(value: Any, maximum: float) -> float:
 
 def observation_metadata(observation: dict) -> dict:
     result = observation["result"]
-    reliable = (result["calibration"]["status"] == "ready" and observation["people"] == 1
+    ambiguous = subject_ambiguous(result, observation["people"])
+    reliable = (result["calibration"]["status"] == "ready" and not ambiguous
                 and result["posture"] not in ("UNKNOWN", "NO_PERSON"))
     return {"person_detected": bool(result["personDetected"]), "posture": result["posture"],
             "confidence": _bounded(result["confidence"], 1) if reliable else 0.0,
             "fps": _bounded(observation["fps"], 240), "vision_available": True,
             "inference_ms": _bounded(observation["inferenceMs"], 60000),
-            "ambiguous_people": observation["people"] > 1}
+            "ambiguous_people": ambiguous}
 
 
 class _OpenCVCamera:
@@ -533,7 +535,9 @@ class LocalVisionService:
                     if result["calibration"]["status"] == "ready" and hasattr(classifier, "export_calibration"):
                         self._calibration = classifier.export_calibration()
                 if preview:
-                    jpeg = _render_preview(frame, pose["landmarks"], result["posture"], fps)
+                    selected = result.get("subject", {}).get("index")
+                    preview_poses = [pose["landmarks"][selected]] if selected is not None else pose["landmarks"]
+                    jpeg = _render_preview(frame, preview_poses, result["posture"], fps)
                     with self._lock:
                         if self._preview and not self._stop.is_set():
                             self._jpeg = jpeg
@@ -551,11 +555,15 @@ class LocalVisionService:
                         logger.warning("Calibration could not be saved path=%s detail=%s; the in-memory baseline remains active", calibration_file, error)
                 previous_calibration_status = calibration["status"]
                 geometry = result.get("geometry") or {}
-                transition = (result["posture"], result["candidate"], result["reason"], calibration["status"], geometry.get("trackingMode"))
+                subject = result.get("subject", {})
+                upper = geometry.get("upperBody") or {}
+                transition = (result["posture"], result["candidate"], result["reason"], calibration["status"], geometry.get("trackingMode"), subject.get("reason"))
                 if (transition != previous_transition and captured - last_log >= .5) or captured - last_log >= 2:
-                    logger.info("Pose posture=%s candidate=%s reason=%s confidence=%.3f calibration=%s:%s/%s mode=%s fps=%.1f inference_ms=%.1f input_mode=%s",
+                    logger.info("Pose posture=%s candidate=%s reason=%s confidence=%.3f calibration=%s:%s/%s mode=%s fps=%.1f inference_ms=%.1f input_mode=%s people=%s subject=%s selection=%s neck_source=%s neck_angle=%s",
                                 result["posture"], result["candidate"], result["reason"], result["confidence"],
-                                calibration["status"], calibration["frames"], calibration["required"], geometry.get("trackingMode", "none"), fps, elapsed, input_mode)
+                                calibration["status"], calibration["frames"], calibration["required"], geometry.get("trackingMode", "none"), fps, elapsed, input_mode,
+                                subject.get("detected", 0), subject.get("index"), subject.get("reason", "unavailable"), upper.get("neckDepthSource"),
+                                round(upper["neckInclinationDeg"], 1) if upper.get("neckInclinationDeg") is not None else None)
                     previous_transition, last_log = transition, captured
                 logger.debug("Pose geometry=%s", geometry)
                 if sequence is not None:

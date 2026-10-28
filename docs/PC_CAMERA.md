@@ -4,6 +4,8 @@ MediaPipe landmark extraction, calibration, posture classification and temporal 
 
 The canonical classifier is `backend/vision/posture.py`. The standalone Pi gateway imports the same classifier rather than maintaining different posture rules. The frontend's `posture.ts` contains display types only. The browser's optional camera capture does not perform MediaPipe inference or classify posture; no browser SDK/WASM is needed.
 
+**After the edge-case logic update, recalibrate upright once for each camera/person.** Previously saved v1 profiles remain readable, but profiles created before this update lack the new camera-relative levels and upper-body Z reference. These features become active after fresh calibration. Keep camera angle and chair height fixed.
+
 ## Install and start on the PC
 
 From the project root in PowerShell:
@@ -58,32 +60,42 @@ startup posture automatically. Without `CALIBRATION_FILE`, calibration remains
 in memory and no baseline file is written. Recalibrate after changing the person,
 camera, zoom or seating position.
 
-MediaPipe supplies landmarks, not FocusGuard labels. Python applies the existing calibrated geometry and confidence checks, including the upper-body improvements tuned with the supplied screenshots. Front view can use a reliable nose and both shoulders when the desk hides the hips. Additional face points help distinguish head pitch and roll, and reliable torso/world geometry supplies extra evidence when available.
+MediaPipe supplies landmarks, not FocusGuard labels. Python combines personal upright calibration, reliable image geometry and optional 3D evidence. Front view can use a reliable nose and both shoulders when the desk hides the hips. Additional face points help distinguish head pitch and roll. SLOUCH can also be a lowered/reclined upper body whose face still looks upright.
+
+The new `headLevelRatio` and `shoulderLevelRatio` measure vertical position relative to the image centre, divided by apparent shoulder width. Their changes from baseline catch that whole-body lowering. Uniform near/far projection about the image centre cancels in these ratios; image size alone does not imply poor posture. The image centre approximates the camera principal point. Changing camera angle, crop, chair height or the person's seating setup requires recalibration: one camera cannot conclusively separate those changes from body lowering.
+
+Upper-body Z no longer requires visible hips. `neckDepthRatio` is shoulder-midpoint Z minus nose Z, divided by 3D shoulder span; `neckInclinationDeg` uses the relative Z/Y neck vector. Reliable world XYZ is preferred; normalized XYZ is a fallback with aspect-corrected Y. Source is recorded as `world|normalized`; different sources are never compared as one baseline. These are estimated relative geometry, not camera distance in metres. [MediaPipe's coordinate definitions](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker/python#handle_and_display_results) place both coordinate origins at the hips. Z changes had mixed signs in the supplied SLOUCH samples, so Z corroborates 2D evidence rather than acting as a standalone threshold. Forward lean retains approach/torso evidence and can use a large world neck-inclination change with raised shoulder level when apparent size changes with camera distance.
+
+With background people, Python selects a desk subject only when its reliable head/shoulders clearly dominate (at least 1.5× the next valid shoulder span), or all other detections are small/cropped fragments. Similar-size competitors or a large in-frame person with unreliable core points stay `UNKNOWN`. This blocks handoff to a smaller background pose while the unreliable foreground body is still detected. Status keeps the raw detected-person count and a derived `subject` selection diagnostic. This is geometric foreground selection, not identity tracking: it cannot guarantee the same person if detections disappear or people exchange positions. Recalibrate for a different user.
+
+For a pronounced head bow with unusable shoulders, a separate **Head only** fallback can report SLOUCH after personal calibration. It requires all seven nose/ear/eye/mouth points in frame with visibility and presence at least 0.75, plausible face shape, modest roll change and corroborating increases in nose/ear, eye/ear and mouth pitch. Measurements are projected relative to the ear line to remove in-plane roll. Normal body geometry takes precedence; the fallback never reports GOOD or LEAN_FORWARD or estimates a hidden torso. Its reason is `tracking_head_bow`, confidence is face reliability, and body/shoulder measurements are null. Uncertain face points, no face baseline, or ordinary upright/forward facial evidence remain UNKNOWN. This identifies a strongly bowed-head component rather than proving spinal curvature; faces alone cannot distinguish every possible forward posture.
 
 | Label | Meaning |
 |---|---|
 | `GOOD` | Reliable geometry remains near the calibrated upright baseline. |
-| `SLOUCH` | Calibrated head/neck collapse or rounded/reclined, chin-up posture consistent with the demo examples. |
-| `LEAN_FORWARD` | Estimated approach relative to the baseline from size and head/shoulder changes or reliable torso geometry. |
+| `SLOUCH` | Relative head/neck collapse or whole upper-body lowering/reclining, including an upright-looking face. |
+| `LEAN_FORWARD` | Relative approach/torso evidence, or corroborating large world neck change with raised shoulders at another apparent size. |
 | `LEAN_LEFT_RIGHT` | Lateral head/shoulder or torso tilt; left and right are grouped. |
 | `NO_PERSON` | No person detected in a frame; distinct from unavailable camera input. |
-| `UNKNOWN` | Calibration incomplete, required head/shoulders cropped or unreliable, multiple people, or unusable geometry. Cropped hips alone do not block Front upper-body tracking. |
+| `UNKNOWN` | Calibration incomplete, insufficient body/head-bow evidence, ambiguous competing people, or unusable geometry. Cropped hips alone do not block Front upper-body tracking. |
 
 Upper-body points require visibility at least 0.6, presence at least 0.5 and combined reliability `sqrt(visibility × presence)` at least 0.6. MediaPipe detection/presence/tracking thresholds are 0.5. The classifier uses the frame's aspect ratio, a personal neutral baseline and short temporal stabilization. Reliability is not a measured classification accuracy percentage.
 
+New labels need 600 ms of stable evidence. A bad frame always reports UNKNOWN. If a previously settled pose is interrupted by exactly one uncertain crop/tracking frame, two subsequent reliable matching observations may recover that same label within a 300–800 ms deadline, adapted to the observed frame interval and measured from the last confirmed frame. Further uncertainty, conflicting posture, absence, ambiguous people, reset/calibration or timestamp discontinuity clears recovery. A new posture never uses this shortcut.
+
 Forward lean is relative geometry, not calibrated centimeters, absolute depth or spine curvature. Moving the camera/chair or changing zoom can resemble posture changes. One front camera cannot conclusively distinguish reclining from moving farther away. These labels do not identify a person, infer attention or diagnose health.
 
-The seven screenshots in `IMG_dataset/` are tuning/regression examples from one person, not an independent accuracy benchmark. Replay their extracted landmarks through the Python classifier with:
+The current set contains **16 screenshots**, including `IMG_dataset/edge case/` and `edge case2/`. Filenames supply the labels; the GOOD overlays inside old screenshots are previous predictions. GOOD1/SLOUCH1 and GOOD2/SLOUCH2 show different people, so each uses its matched personal GOOD reference. Replay all current cases with:
 
 ```powershell
-.\.venv\Scripts\python.exe -m evaluation.evaluate_pc_posture
+.\.venv\Scripts\python.exe -m evaluation.evaluate_pc_posture --input evaluation/fixtures/pc-dataset-edges.landmarks.json
 ```
 
-The fixture is `evaluation/fixtures/pc-dataset.landmarks.json`; the default report is `evaluation/results/pc-dataset/report.json`. See [the tuning report](../evaluation/pc_dataset.md) and [evaluation protocol](../evaluation/README.md). The frozen-landmark fixture remains a 7/7 classifier regression. A separate native CPU pipeline probe on the seven screenshots matched 6/7: the extreme SLOUCH1 example remained UNKNOWN because its newly extracted head/shoulder evidence was unreliable/cropped. The accepted posture logic was preserved rather than retuned for that probe. Neither result is a live-webcam or independent-person accuracy benchmark. Passing replay tests does not establish live camera speed or accuracy on new people.
+Fresh native CPU extraction and replay now match **16/16** for original pixels and a 640×480/quality-70 JPEG approximation of browser input, versus 9/16 before the fix. The original `pc-dataset.landmarks.json` fixture remains unchanged and still matches 7/7; omitting `--input` replays that older fixture. See [the tuning report](../evaluation/pc_dataset.md) and [evaluation protocol](../evaluation/README.md). These are tuning/regression samples, not held-out accuracy or actual near/far video trials. A historical pre-update native-service probe matched 6/7 due to unreliable/cropped SLOUCH1 shoulders; that earlier result is retained separately in the tuning report. No rule bypasses required core-point reliability to force a supplied label.
 
 ## Terminal debugging
 
-The `focusguard.vision` logger reports startup, requested/actual delegate, camera backend/index, calibration, posture/candidate/reason changes, FPS, inference milliseconds, errors and resource release. INFO output includes periodic reports about every two seconds and rate-limited transitions; DEBUG adds numerical geometry without frames or landmark arrays.
+The `focusguard.vision` logger reports startup, requested/actual delegate, camera backend/index, calibration, posture/candidate/reason changes, FPS, inference milliseconds, selected subject/raw person count, Z source/neck angle, errors and resource release. INFO output includes periodic reports about every two seconds and rate-limited transitions; DEBUG adds numerical geometry, including the new level/depth ratios, without frames or landmark arrays.
 
 ```powershell
 $env:FOCUSGUARD_LOG_LEVEL = 'DEBUG'
